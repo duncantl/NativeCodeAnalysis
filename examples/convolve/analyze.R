@@ -15,6 +15,8 @@
 #
 #     clang -fno-discard-value-names -S -emit-llvm convolve.c
 #
+# DTL: Nice - thanks for that.
+#
 # It is also possible to keep variable names in older versions of Clang by
 # using the `-###` flag to get the raw compiler command and then removing the
 # `-discard-value-names` flag.
@@ -42,21 +44,26 @@ getBlocks(con)
 # This comes back as a list of Argument objects.
 params = getParameters(con)
 
-# So now we need to get the type off of the Argument.
+# So now we need to get the type of of the Argument.
 #
 # But getType() just tells us that the param is a pointer.
 # And does it do this even if the param type is not a pointer?
+# DTL:  Why would it tell you it was a pointer if it wasn't?
+#  f = Function("bob", VoidType, list(Int32Type), m)
+#  getType(getParameters(f)[[1]])  # Returns IntegerTyId
 ty = getType(params[[1]])
 
 # Get the element type of the pointer.
 elt_ty = getElementType(ty)
 
 # QQ: Does Rllvm provide a function to check equality of two LLVM Types?
+#  DTL:  Yes, sameType.
 #
 # According to the LLVM docs, Types are immutable and so can be compared by
 # comparing addresses. But identical() returns FALSE when these two types are
 # the same:
 identical(elt_ty, DoubleType)
+# DTL: sameType(elt_ty, DoubleType)  returns TRUE.
 
 # So now we can get the element type for each parameter.
 get_elt_type =
@@ -86,6 +93,23 @@ lapply(params, get_elt_type)
 # somehow, and for output types to check whether the argument is ever written
 # somehow. Aliases may complicate this (but maybe LLVM will help to deal with
 # aliases).
+
+# <DTL>  If you you compile with any level of optimization, e.g. -O1 or O2 or O3,
+#  the resulting .ll file will have additional attributes on the parameters, including
+#  readonly.
+#  So
+#   sapply(params, onlyReadsMemory)
+#  will return
+#     a    na     b    nb    ab 
+#  TRUE  TRUE  TRUE  TRUE FALSE 
+# So a, b, na, nb are readonly and  ab is not and that is where the results are returned.
+#
+# It is also possible for us to create the ll file unoptimized and then to Optimize() a clone of it
+# via Rllvm after having read it so that we can have both versions.
+# The Optimize() function may not do that quite correctly now, but if this is needed, I can fix this.
+# </DTL>
+
+#
 #
 # Let's start with checking whether each argument is read.
 blocks = getBlocks(con)
@@ -121,6 +145,9 @@ users = getAllUsers(con[["ab"]])
 # QQ: Is there any routine in LLVM that can automatically return the whole
 # use-def chain (including through stores/loads), or do we have to construct it
 # manually?
+#
+# DTL: Is this question still relevant given the onlyReadsMemory solution above.
+#
 #
 # One way to do it manually:
 #   * Extract address from store.
