@@ -1,0 +1,15 @@
+Package: NativeCodeAnalysis
+Title: Tools to analyze native code (C/C++)
+Description: This provids functionality to analyze C and C++ code in various ways.
+   It works with both the compiled version of the code as LLVM's Intermediate Representation
+   and also the abstract syntax tree (AST) of the original C/C++ code.
+   Both are necessary for completeness as the compilation removes names of fields, etc. in data structures.
+   The analysis will include R-object type inference from .Call (and sub) routines, memory management identificatio
+  (e.g. which routine allocates memory or not), identifying read and write arguments,
+  presence of side-effects on non-local data structures (e.g. on the Graphics devices or options)
+Version: 0.1-0
+Author: Nick Ulle <naulle@ucdavis.edu>
+        Duncan Temple Lang <duncan@r-project.org>
+Maintainer:   Duncan Temple Lang <duncan@r-project.org>
+License: BSD+LICENSE
+LazyData: true
