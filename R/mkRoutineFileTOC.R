@@ -5,9 +5,9 @@ mkRoutineFileTOC =
     # For all the files in the specified directory, get a list of the defined Functions
     # based on the ll i.e. IR files.
     #
-function(dir, files = list.files(dir, pattern = "\\.ll$", full.names = TRUE), byFile = FALSE)
+function(dir, files = list.files(dir, pattern = "\\.ll$", full.names = TRUE), byFile = FALSE, names = TRUE)
 {
-   toc = lapply(files, getDefinedRoutines)
+   toc = lapply(files, getDefinedRoutines, names = names)
    if(byFile)
       structure(toc, names = files)
    else
@@ -18,10 +18,14 @@ getDefinedRoutines =
     #
     # In the module, find the Functions that have a body.
     #
-function(file, module = parseIR(file))
+function(file, module = parseIR(file), names = TRUE)
 {
     w = sapply(names(module), function(x) isDefinedRoutine(module[[x]]))
-    names(module)[w]
+    ans = names(module)[w]    
+    if(names)
+       ans
+    else
+       structure(lapply(names(module)[w], function(x) module[[x]]), names = ans)
 } 
 
 
@@ -31,7 +35,7 @@ isDefinedRoutine =
     #
 function(fun)
 {
-  is(fun, "Function") && (length(getBlocks(fun)) > 0)
+    is(fun, "Function") && (length(getBlocks(fun)) > 0)
 }
 
 
