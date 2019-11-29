@@ -31,7 +31,7 @@ isDefinedRoutine =
     #
 function(fun)
 {
-  is(fun, "Function") && length(getBlocks(fun)) > 0
+  is(fun, "Function") && (length(getBlocks(fun)) > 0)
 }
 
 
