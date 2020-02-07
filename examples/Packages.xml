@@ -1,0 +1,104 @@
+<section>
+<title></title>
+
+<para>
+  See <file>IRMakefile</file> for  a make file we can use
+  in the src/ directory of a package to generate the <ext>ir</ext>
+  files.
+  We invoke it with 
+<sh:code>
+make -f IRMakefile ir
+</sh:code>
+<file>IRMakefile</file> includes <file>Makevars</file>
+and <r/>'s own <file>Makeconf</file>.
+</para>
+
+
+<para>
+We can use <r:func>getNativeCalls</r:func>  
+<r:code>
+native = getNativeCalls("~/GitWorkingArea/Rllvm/R")
+</r:code>
+to find the names of the routines that are called.
+We'll want to do this with more focus on functions
+and which routines they call. This approach just
+gets us to the routines.
+</para>
+
+
+<para>
+Let's look at the routine <c:func>R_Value_getNumUses</c:func>.
+We don't necessarily know which <ext>ir</ext> file this is in,
+so we'll generate the table of contents/index with
+<r:code>
+idx = mkRoutineFileTOC("~/GitWorkingArea/Rllvm/src")
+</r:code>
+<r:code>
+f = idx$file["R_Value_getNumUses" == idx$routine]
+m = parseIR(f)
+</r:code>
+</para>
+
+
+<para>
+<r:code>
+getRReturnTypes(m$R_Value_getNumUses)
+<r:output><![CDATA[
+$type
+[1] "numeric"
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+]]></r:output>
+</r:code>
+</para>
+
+
+<para>
+<r:code>
+ty = getRReturnTypes(func$R_Function_getBasicBlockList)
+<r:output><![CDATA[
+$type
+VECSXP 
+"list" 
+
+$length
+[1] "  %__r.0.lcssa.i.i.i = phi i64 [ 0, %entry ], [ %phitmp57, %_ZNK4llvm12simple_ilistINS_10BasicBlockEJEE4sizeEv.exit.loopexit ]"
+
+attr(,"class")
+[1] "RVectorType"
+]]></r:output>
+</r:code>
+The length is either the literal value 0 or the result of the call
+</para>
+
+
+
+<para>
+  <r:code>
+f = idx$file[idx$routine == "R_Type_isEmptyTy"]    
+types = parseIR(f)
+getRReturnTypes(types$R_Type_isEmptyTy)
+</r:code>
+</para>
+
+
+<para>
+<r:code>
+byfile = split(idx, idx$file)    
+rts = lapply(byfile, function(x) {
+                      m = parseIR(x$file[1])
+                      structure(lapply(x$routine, function(r) try(getRReturnTypes(m[[r]]))),
+		                names = x$routine)
+		     })
+</r:code>
+</para>
+
+
+
+
+
+</section>

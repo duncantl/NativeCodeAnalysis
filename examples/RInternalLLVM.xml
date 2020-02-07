@@ -1,0 +1,145 @@
+<section>
+<title></title>
+
+<para>
+  Consider some of the random number generator functions mentioned in
+  <file>names.c</file>, e.g.,
+  <r:func>rchisq</r:func> and <r:func>rbeta</r:func>.
+  These call <c:func>do_random1</c:func> and <c:func>do_random2</c:func> respectively.
+  <r:func>rhyper</r:func> calls <c:func>do_random3</c:func>,
+  while <r:func>sample</r:func> calls <c:func>do_sample</c:func>,
+  and <r:func>sample2</r:func> calls <c:func>do_sample2</c:func>.
+</para>
+
+
+
+<para>
+How do we read <c:var>R_FunTab</c:var> via <r:pkg>Rllvm</r:pkg>?
+See ../tests/R_FunTab.xml
+</para>
+
+
+
+<para>
+Now that we have the <c:var>R_FunTab</c:var>, we start looking
+at some of the functions and routines we identified above.
+We generate the <ir/> code for the different files <dir>src/main</dir>.
+We do this by creating a file named <file>GNUmakefile</file> which takes precedence
+over the <file>Makefile</file>.
+This uses the existing <file>Makefile</file> by including it and reusing its
+variables. Then we create a target for <ext>ir</ext> files which are the <ir/> code
+from the <c/> files.
+<programlisting><![CDATA[
+include Makefile
+
+ifeq ($(CLANG),)
+ CLANG=/usr/local/opt/llvm/bin/clang
+endif
+
+IR=$(patsubst %.c, %.ir, $(SOURCES_C) $(SOURCES))
+
+ir: $(IR)
+
+%.ir: $(srcdir)/%.c
+	$(CLANG) -fno-discard-value-names -emit-llvm -S $(ALL_CPPFLAGS) -c $< -o $@
+]]></programlisting>
+This gives us a default target that creates all the <ext>ir</ext> files. So we can
+invoke this with
+<sh:code>
+make ir
+</sh:code>
+</para>
+
+
+<para>
+Given the <ir/> files, we can read one or more into our <r/> session:
+<r:code>
+RMainDir = "~/R-devel/build/src/main"
+</r:code>  
+<r:code>
+random = parseIR(file.path(RMainDir, "random.ll"))
+</r:code>
+</para>
+<para>
+  And now we can look at the <r:func>getRReturnTypes</r:func> function
+  for a given routine.
+<r:code>
+r = getRReturnTypes(random$do_random2)
+<r:output><![CDATA[
+$type
+  REALSXP 
+"numeric" 
+
+$length
+[1] "  %n.0 = phi i64 [ %conv, %if.end22 ], [ %call24, %if.else ]"
+
+attr(,"class")
+[1] "RVectorType"
+]]></r:output>
+</r:code>
+There are two possible lengths for the vector.
+
+<r:code>
+r$length[[1]][[1]]
+<r:output><![CDATA[
+[1] "  %call14 = tail call double @Rf_asReal(%struct.SEXPREC.33* %call13) #6"
+]]></r:output>
+</r:code>
+And the argument is
+<r:code>
+r$length[[1]][[1]][[1]]
+<r:output><![CDATA[
+[1] "  %call13 = tail call %struct.SEXPREC.33* @CAR(%struct.SEXPREC.33* %args) #6"
+]]></r:output>
+</r:code>
+<c:arg>args</c:arg> is a parameter and so <c:expr>CAR(args)</c:expr> is the first argument.
+</para>
+
+<para>
+  The second possible value for the length is
+<r:code>
+r$length[[2]]
+<r:output><![CDATA[
+[1] "  %call24 = tail call i64 @XLENGTH(%struct.SEXPREC.33* %call13) #6"
+]]></r:output>
+</r:code>
+This is <c:expr>XLENGTH(CAR(args))</c:expr>.
+So this is the length of the first argument.
+</para>
+<para>
+How do we represent this in <r:pkg>typesys</r:pkg>
+</para>
+
+
+
+<para>
+  <c:func>do_random1</c:func> is very similar and yields the same resulting type.
+  So is <c:func>do_random3</c:func>.
+</para>
+
+
+
+<section>
+<title><c:func>do_sample</c:func></title>
+
+<para>
+<r:code>
+r = getRReturnTypes(random$do_sample)
+</r:code>
+We get 9 different possible return paths – 5 are integer and 4 are numeric.
+The length for all but the first of the return types is
+<r:output><![CDATA[
+[1] "  %call84 = tail call i64 @Rf_asVecSize(%struct.SEXPREC.33* %call3) #6"
+]]></r:output>
+This corresponds to <c:expr>Rf_asVecSize(CAR(args))</c:expr>.
+Where is <c:func>Rf_asVecSize</c:func> defined? Via grep, we find it in <file>builtin.c</file>,
+but we could find this by getting the names of all routines in all modules corresponding to the different files.
+<r:code>
+b = parseIR(file.path(RMainDir, "builtin.ir"))
+</r:code>
+</para>
+</section>
+
+
+
+</section>

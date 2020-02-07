@@ -1,0 +1,41 @@
+<section
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:c="http://www.C.org">
+  <title></title>
+
+
+  See ~/Books/CompilerTechnologiesInR/CallingRCCode.xml
+
+<para>
+<r:code>
+library(RCIndex)
+</r:code>
+  
+<r:code>
+tu = createTU("../../../src/main/names.c", includes = c("~/R-devel/src/include", "/usr/include"))
+</r:code>
+<fix>Ignore error on stdio.h not found</fix>
+</para>
+
+
+<para>
+vars = getVariables(tu, "names.c")
+names(vars)
+<r:output><![CDATA[
+[1] "R_FunTab"     "Spec_name"    "DDVALSymbols"
+]]></r:output>
+These are the R_FunTab mapping an R function name in .Internal/.Primitive to a C routine and more,
+Spec_name for the names of the special symbols in R
+and DDVALSymbols which is an array of strings of the form ..0, ..1, ..2, ..3, ..4, 
+</para>
+
+
+<para>
+We're interested in R_FunTab.
+<r:code>
+
+</r:code>  
+</para>
+
+
+</section>
