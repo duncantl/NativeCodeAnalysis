@@ -41,13 +41,27 @@ sapply(els, function(x) if(!isZeroValue(x)) getValue(x[[3]]) else NA)
 
 
 <section>
-<title></title>
+<title><c:var>R_FunTab</c:var> in <file>names.c</file></title>
+
+
 
 <para>
 <r:code>
 RMainDir = "~/R-devel/build/src/main"
 m = parseIR(file.path(RMainDir, "names.ir"))
 </r:code>
+With additions to the <cpp/> code in <r:pkg>Rllvm</r:pkg>,
+we can now get the entire contents with
+<r:code>
+fntab = getValue(m[["R_FunTab"]])
+</r:code>
+We can put the <r/> functions as names on the list:
+<r:code>
+names(fntab) = sapply(fntab, `[[`, 1)
+</r:code>
+</para>
+<para>
+The way to do this in R
 <r:code>
 ftab = getGlobalVariable(m, "R_FunTab")
 val = getInitializer(ftab)
