@@ -1,0 +1,25 @@
+ifeq ($(CLANG),)
+ CLANG=/usr/local/opt/llvm/bin/clang
+endif
+
+R_SHARE_DIR=$(R_HOME)/share
+R_INCLUDE_DIR=$(R_HOME)/include
+
+SOURCES=$(wildcard *.c *.cpp *.cc)
+
+include $(R_HOME)/etc/Makeconf
+include Makevars
+
+IR=$(patsubst %.cpp,%.ir, $(patsubst %.c, %.ir, $(SOURCES)))
+
+ir: $(IR)
+
+%.ir: %.c
+	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) -c $< -o $@
+
+%.ir: %.cpp
+	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) -c $< -o $@
+
+
+ir:
+	echo "$(IR)"
