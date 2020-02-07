@@ -19,7 +19,7 @@ setMethod("getCalledRoutines", "list",
 
 setMethod("getCalledRoutines", "BasicBlock",
           function(x, ...) {
-              lapply(x[], getCalledRoutines)
+              lapply(getBlockInstructions(x), getCalledRoutines)
           })
 
 
@@ -37,13 +37,13 @@ setMethod("getCalledRoutines", "Instruction",
 library(igraph)
 
 setGeneric("callGraph",
-           function(x, ...)
+           function(x, adjacency = FALSE, ...)
               standardGeneric("callGraph"))
 
 
 
 setMethod("callGraph", "character",
-          function(x, pattern = "\\.(ll|ir)", ...) {
+          function(x, adjacency = FALSE, pattern = "\\.(ll|ir)", ...) {
               # if is a file name, parse the module
               # if a directory, parse all the IR modules
               # if a mixture of file names and directories, merge the file names from the directories into the full list of file names.
@@ -60,18 +60,26 @@ setMethod("callGraph", "character",
               }
               
               mods = lapply(x, parseIR)
-              callGraph(structure(mods, class = "ListOfModules"))
+              callGraph(structure(mods, class = "ListOfModules"), adjacency)
           })
 
 
 
 setMethod("callGraph", "Module",
-          function(x, within = TRUE, ...) {
-              funs = getDefinedRoutines(, x)
-              calls = lapply(funs, function(x) getCalledRoutines(sh[[x]]))
-              names(calls) = funs
-               # NAs are for calls via routine pointers.
-              tmp = lapply(tmp, function(x) unique(x[!is.na(x)]) )
+          function(x, adjacency = FALSE, within = TRUE, ...) {
+              funs = getDefinedRoutines(, x, names = FALSE)
+              calls = lapply(funs, function(f) getCalledRoutines(f))
+
+              # NAs are for calls via routine pointers.
+              
+              tmp = if(within)
+                       lapply(calls, function(x) unique(x[!is.na(x)]) )
+                    else
+                       lapply(calls, function(x) intersect(x[!is.na(x)], names(funs)))
+              
               d = data.frame(from = rep(names(tmp), sapply(tmp, length)), to = unlist(tmp), stringsAsFactors = FALSE)
-              igraph::graph_from_data_frame(d)    
+              if(adjacency)
+                  d
+              else
+                  igraph::graph_from_data_frame(d)    
           })

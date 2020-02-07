@@ -1,3 +1,17 @@
+import(Rllvm)
 export(getReturnValues)
 export(findTerminators)
 export(findInstructions)
+
+export(mkRoutineFileTOC)
+export(getRReturnTypes)
+
+export(getCalledRoutines)
+exportMethods(getCalledRoutines)
+export(callGraph)
+
+export(getNativeCalls, getNativeCallsInFile)
+
+export(inferParamTypes, inferParamType)
+
+export(mapRoutineName)

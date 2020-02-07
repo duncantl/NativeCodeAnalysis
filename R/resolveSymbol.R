@@ -9,7 +9,7 @@ mapRoutineName =
 function(sym, package)
 {
 
-    routines = getNamespace("overlap")$.__NAMESPACE__.$nativeRoutines
+    routines = getNamespace(package)$.__NAMESPACE__.$nativeRoutines
     rr = routines[[1]]
     if(sym %in%names(rr))
         rr[[sym]]
