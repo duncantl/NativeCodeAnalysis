@@ -1,9 +1,10 @@
 # tolower()
 
-We don't show how we know tolower() maps
-to the C routine do_tolower,
-now how toupper also maps to that same C routine.
-That is a separate task based on understanding of the architectire of R.
+We don't show how we know tolower() maps to the C routine do_tolower,
+nor how toupper also maps to that same C routine.
+This is described in ../tests/R_FunTab.xml
+and now quite simple from a computational perspective.
+However, it is a separate task based on understanding of the architecture of R.
 
 ```
 tolower
@@ -21,7 +22,7 @@ library(Rllvm); library(NativeCodeAnalysis)
 ```
 
 ```
-m = parseIR("~/R-devel/build/src/main/character.ll")
+m = parseIR("~/R-devel/build/src/main/character.ir")
 m$do_tolower
 ```
 ```
