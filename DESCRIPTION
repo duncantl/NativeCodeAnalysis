@@ -1,6 +1,7 @@
 Package: NativeCodeAnalysis
-Title: Tools to analyze native code (C/C++)
-Description: This provids functionality to analyze C and C++ code in various ways.
+Title: Tools to analyze native code (C/C++) related to R.
+Description: This provides functionality to analyze C and C++ code in various ways
+   that relate to calling it from R or it calling R code.
    It works with both the compiled version of the code as LLVM's Intermediate Representation
    and also the abstract syntax tree (AST) of the original C/C++ code.
    Both are necessary for completeness as the compilation removes names of fields, etc. in data structures.
@@ -10,6 +11,7 @@ Description: This provids functionality to analyze C and C++ code in various way
 Version: 0.1-0
 Author: Nick Ulle <naulle@ucdavis.edu>
         Duncan Temple Lang <duncan@r-project.org>
-Maintainer:   Duncan Temple Lang <duncan@r-project.org>
+Maintainer: Duncan Temple Lang <duncan@r-project.org>
+Imports: Rllvm, RCIndex
 License: BSD+LICENSE
 LazyData: true
