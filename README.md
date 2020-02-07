@@ -11,3 +11,19 @@ rchk tool that finds, e.g., PROTECT/UNPROTECT errors in C/C++ code.
 The reason for this choice is that writing R code is more time-efficient and makes the code more
 accessible and extensible to others.
 
+
+
+
+# Utilities
++ examples/IRMakefile - stand-aside makefile that complements a package's Makevars file so that we
+                        can create the IR files from the .c/.cpp source files.
+						
+# Documentation
+
++ examples/Packages.xml - how to analyze C/C++ code in packages.
++ examples/RInternalLLVM.xml - Rllvm approach to analyzing R base/internal code
++ examples/RInternal.xml  - RCIndex approach to analyzing R base/internal code
++ tests/R_FunTab.xml - how to read the R_FunTab array in names.c that maps primitive/internal  functions to C routines
++ examples/toupper.md - analysis of the toupper() function as it relates to C code.
+
+
