@@ -1,6 +1,6 @@
 findTerminators =
 function(x, test, ...)
-# Find all ops that satisfy a condition.
+   # Find all ops that satisfy a condition.
 {
   if (is(x, "Function"))
     x = getBlocks(x)
