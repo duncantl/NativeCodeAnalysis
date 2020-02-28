@@ -5,7 +5,8 @@ mkRoutineFileTOC =
     # For all the files in the specified directory, get a list of the defined Functions
     # based on the ll i.e. IR files.
     #
-function(dir, files = list.files(dir, pattern = "\\.(ir|ll)$", full.names = TRUE), byFile = FALSE, names = TRUE)
+function(dir, files = list.files(dir, pattern = pattern, full.names = TRUE), byFile = FALSE, names = TRUE,
+         pattern = "\\.(ir|ll)$")
 {
    toc = lapply(files, getDefinedRoutines, names = names)
    if(byFile)
@@ -21,6 +22,9 @@ getDefinedRoutines =
 function(file, module = parseIR(file), names = TRUE, dropInternal = TRUE)
 {
     funs = getModuleFunctions(module)
+    if(length(funs) == 0)
+        return(list())
+    
     w = sapply(funs, isDefinedRoutine)  # function(x) length(getBlocks(x))) > 0
     if(dropInternal)
         w = w & !grepl("\\.", names(funs))
