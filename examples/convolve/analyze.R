@@ -246,6 +246,9 @@ function(x, test, ...)
   found = lapply(x, function(block) {
     # QQ: Might be nice if getBlockInstructions was an as.list method so that
     # getBlockInstructions isn't necessary here.
+      # DTL:  you can use block[] rather than getBlockInstructions(block)
+      #   but this is just syntactic sugar.  And we would be better with
+      #  lapply(block, test, NA, ...)
     ops = getBlockInstructions(block)
     is_match = vapply(ops, test, NA, ...)
     ops[is_match]
