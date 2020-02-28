@@ -24,15 +24,28 @@ function(p)
                )
     }
 
+    if(!is.null(ans))
+        return(ans)
+    
 
-    if(is.null(ans)) {
-        if("TYPEOF" %in% k) {
+    if(!is.na(k) && "TYPEOF" %in% k) {
             tyu = getAllUsers(users[ k == "TYPEOF" ])
             w = sapply(tyu, function(x) if(is(x, "ICmpInst")) lapply(x[], function(x) if(is(x, "ConstantInt")) getValue(x)))
-            tyu[w]
-        }
-        
+            ans = tyu[w]
     }
+
+    if(is.null(ans)) {
+        users = users[ sapply(users, is, "StoreInst") ]
+        vars = lapply(users, `[[`, 2)
+        u2 = unlist(lapply(vars, getAllUsers))
+        w = u2 %in% users
+        u2 = u2[!w]
+        w = sapply(u2, is, "LoadInst")
+        u2 = c(u2[!w], unlist(lapply(u2[w], getAllUsers)))
+    }
+        
+
+    ans
 }
 
 
