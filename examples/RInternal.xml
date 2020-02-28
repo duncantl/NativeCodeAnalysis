@@ -3,8 +3,9 @@
 	 xmlns:c="http://www.C.org">
   <title></title>
 
-
-  See ~/Books/CompilerTechnologiesInR/CallingRCCode.xml
+<para>
+See ~/Books/CompilerTechnologiesInR/CallingRCCode.xml for an Rllvm approach.
+</para>
 
 <para>
 <r:code>
