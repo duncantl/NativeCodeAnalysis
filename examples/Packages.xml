@@ -17,6 +17,8 @@ and <r/>'s own <file>Makeconf</file>.
 <para>
 We can use <r:func>getNativeCalls</r:func>  
 <r:code>
+library(NativeCodeAnalysis)
+library(rstatic)
 native = getNativeCalls("~/GitWorkingArea/Rllvm/R")
 </r:code>
 to find the names of the routines that are called.
@@ -31,10 +33,11 @@ Let's look at the routine <c:func>R_Value_getNumUses</c:func>.
 We don't necessarily know which <ext>ir</ext> file this is in,
 so we'll generate the table of contents/index with
 <r:code>
-idx = mkRoutineFileTOC("~/GitWorkingArea/Rllvm/src")
+idx = mkRoutineFileTOC("~/GitWorkingArea/Rllvm/src", pattern = "\\.ir$")
 </r:code>
 <r:code>
 f = idx$file["R_Value_getNumUses" == idx$routine]
+library(Rllvm)
 m = parseIR(f)
 </r:code>
 </para>
@@ -59,6 +62,8 @@ attr(,"class")
 
 <para>
 <r:code>
+f = idx$file["R_Function_getBasicBlockList" == idx$routine]    
+func = parseIR(f)
 ty = getRReturnTypes(func$R_Function_getBasicBlockList)
 <r:output><![CDATA[
 $type
@@ -78,7 +83,7 @@ The length is either the literal value 0 or the result of the call
 
 
 <para>
-  <r:code>
+<r:code>
 f = idx$file[idx$routine == "R_Type_isEmptyTy"]    
 types = parseIR(f)
 getRReturnTypes(types$R_Type_isEmptyTy)
