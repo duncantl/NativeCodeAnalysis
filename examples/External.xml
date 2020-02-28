@@ -1,0 +1,122 @@
+<section
+	 xmlns:sh="http://www.shell.org"
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:c="http://www.C.org"
+	 xmlns:cpp="http://www.C++.org">
+<title>.External</title>
+
+<para>
+  Consider the devEMF package. It has one .External call.
+  We install it and then we create the ir file
+<sh:code>
+make -f ~/GitWorkingArea/NativeCodeAnalysis/examples/IRMakefile devEMF.ir    
+</sh:code>
+</para>
+
+
+<para>
+<r:code>
+library(Rllvm)    
+f = "~/CRAN/Pkgs/devEMF/src/devEMF.ir"
+mod = parseIR(f)
+</r:code>
+
+<r:code>
+library(NativeCodeAnalysis)  
+rty = getRReturnTypes(mod$devEMF)
+<r:output><![CDATA[
+[[1]]
+[1] "R_NilValue"
+attr(,"class")
+[1] "NULLType"
+
+[[2]]
+NULL
+]]></r:output>
+</r:code>
+This is correct
+</para>
+<para>
+Now for inferring the types of the arguments.
+<r:code>
+atypes = inferExternalParamTypes(mod$devEMF)
+</r:code>
+When we did this, it gave  very bad results.  It now gives the correct results.
+We'll discuss how it should have analyzed the <ir/> code.
+</para>
+
+<para>
+The first use of the only argument <c:arg>args</c:arg> is  
+<cpp:code>
+args = CDR(args); /* skip entry point name */    
+</cpp:code>
+So this assigns removes the tail of the list to the same variable.
+But this no longer counts as the same argument.
+So we will trace where that object is used.
+</para>
+<para>
+<r:code>
+f = mod$devEMF
+p = getParameters(f)[[1]]
+u = rev(getAllUsers(p))
+</r:code>
+As we mentioned, there is only one user:
+<r:output><![CDATA[
+[1] "  %call = tail call %struct.SEXPREC.2* @CDR(%struct.SEXPREC.2* %args)"
+]]></r:output>
+So this is a call to CDR. Let's see where this value is used?
+<r:code>
+u2 = rev(getAllUsers(u[[1]]))
+<r:output><![CDATA[
+[[1]]
+[1] "  %call1 = tail call %struct.SEXPREC.2* @CAR(%struct.SEXPREC.2* %call)"
+
+[[2]]
+[1] "  %call4 = tail call %struct.SEXPREC.2* @CDR(%struct.SEXPREC.2* %call)"
+]]></r:output>
+</r:code>
+This is the usual "take the first element, and then the rest of the list".
+Does <r:func>inferParamType</r:func> determine the type  of <r:expr eval="false">u2[[1]]</r:expr>.
+<r:code>
+inferParamType(u2[[1]])
+</r:code>
+So no! Not at this moment.  Because it doesn't handle Rf_as* routines. Again, it does now.
+</para>
+<para>
+The users of this are
+<r:code>
+getAllUsers(u2[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %call2 = tail call %struct.SEXPREC.2* @Rf_asChar(%struct.SEXPREC.2* %call1)"
+]]></r:output>
+</r:code>
+And that clearly calls <c:func>Rf_asChar</c:func> with what is <c:expr>CAR(CDR(originalArgs))</c:expr>.
+So <r:func>inferParamType</r:func> now handles those scalar coercions.
+</para>
+
+<para>
+  The key aspect in this is that we find all the uses of the CAR calls originating
+  from the CDR calls to the first parameter.
+  So we write a function <r:func>getAllCARUses</r:func> to take the first parameter.
+  It walks through all users of the this. It expects to see CAR and CDR calls for
+  the uses. For now, it won't necessarily do well if the calls aren't to those routine.
+  It collects the CAR calls and returns those.
+  For the CDR calls, it iteratively processes those again looking for CAR calls.
+</para>
+
+
+<para>
+The code
+<r:code>
+atypes = inferExternalParamTypes(mod$devEMF)
+</r:code>
+now gives the correct results!
+And it tallies with the R code and the default values for the R function.
+</para>
+
+
+
+
+
+</section>

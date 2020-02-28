@@ -32,6 +32,14 @@ function(p)
             tyu = getAllUsers(users[ k == "TYPEOF" ])
             w = sapply(tyu, function(x) if(is(x, "ICmpInst")) lapply(x[], function(x) if(is(x, "ConstantInt")) getValue(x)))
             ans = tyu[w]
+        }
+
+    RAsRoutines = c("Rf_asChar" = 16L, "Rf_asReal" = 14L, "Rf_asInteger" = 13L, "Rf_asLogical" = 10L)
+    if(any(w <- (ku %in% names(RAsRoutines)))) {
+        if(!all(w))
+            warning("not all routine call names in Rf_as*")
+        kalls = intersect(names(RAsRoutines), ku)
+        return(structure(list(type = RAsRoutines[kalls], length = 1), class = c("RScalarType", "RVectorType")))
     }
 
     if(is.null(ans)) {
@@ -42,6 +50,7 @@ function(p)
         u2 = u2[!w]
         w = sapply(u2, is, "LoadInst")
         u2 = c(u2[!w], unlist(lapply(u2[w], getAllUsers)))
+        #!!! Need to finish this off!
     }
         
 
