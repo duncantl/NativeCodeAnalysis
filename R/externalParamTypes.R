@@ -27,12 +27,15 @@ function(p)
     
     u = rev(getAllUsers(p))
 
+    seen = list()
     while(length(u) > 0) {
         k = sapply(u, function(i) if(is(i, "CallInst")) getCallName(i) else NA)
-        w = k == "CAR"
+        w = k %in% c("CAR", "CADR", "CADDR", "CADDDR", "CAD4R")
         uses = append(uses, u[w])
         u = unlist(lapply(u[!w], getAllUsers))
-        
+        u = setdiff(u, seen)
+        seen = union(seen, u)
     }
+    
     uses
 }
