@@ -146,7 +146,7 @@ mkLength =
 function(x)
 {
     x = unravel(x)
-browser()
+
     if(is(x, "CallInst")) {
         rtn = getCallName(x)
         if(rtn == "Rf_length")
@@ -169,31 +169,36 @@ browser()
                  x
                )
     } else if(is(x, "GetElementPtrInst")) {
-        gteElementOf(x)
-        i = mkLength(x[[2]])
-        val = x[[1]]
-        browser()
-        if(is(val, "CallInst") && getCallName(val) %in% c("INTEGER", "LOGICAL", "REAL"))
-            val = val[[1]]
-        
-        if(is(val, "CallInst") && getCallName(val) %in% c("VECTOR_ELT")) 
-            val = structure(list(obj = val[[1]], index = mkLength(val[[2]])), class = "ElementOf")
-        
-        structure(list(obj = val, index = i),  class = "ElementOf")
+        getElementOf(x)
+   
     } else
         x
 }
 
 
-gteElementOf =
+getElementOf =
 function(x)
 {
     val = x[[1]]
     idx = 0
+ browser()    
 
-    if(is(x, "GetElementPtrInst")) {
-
+    if(is(val, "CallInst")) {
+        if(getCallName(val) %in% c("INTEGER", "LOGICAL", "REAL"))
+            val = val[[1]]
+        else if(getCallName(val) == "VECTOR_ELT") {
+            idx = mkLength(x[[2]])
+        }
     }
+
+    if(is(x, "CallInst") && getCallName(x) %in% c("VECTOR_ELT")) 
+        idx = mkLength(x[[2]])
+        
+    if(is(val, "CallInst") && getCallName(val) %in% c("VECTOR_ELT")) 
+        val = getElementOf(val)
     
+    if(is(x, "GetElementPtrInst")) 
+        idx = mkLength(x[[2]])
+
     structure(list(obj = val, index = idx),  class = "ElementOf")
 }
