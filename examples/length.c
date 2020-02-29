@@ -69,3 +69,58 @@ R_foo6(SEXP x,  SEXP y)
 }
 
 
+SEXP
+R_foo7()
+{
+    SEXP ans = ScalarInteger(1);
+    PROTECT(ans);
+    SET_CLASS(ans, ScalarString(mkChar("Bob")));
+    UNPROTECT(1);
+    return(ans);
+}
+
+
+SEXP
+R_foo8(SEXP x)
+{
+    SEXP ans = ScalarInteger(1);
+    PROTECT(ans);
+    char *className;
+    if(LOGICAL(x)[0])
+	className = "abc";
+    else
+	className = "xyz";
+    
+    SET_CLASS(ans, ScalarString(mkChar(className)));
+    UNPROTECT(1);
+    return(ans);
+}
+
+
+SEXP
+R_foo9(SEXP x)
+{
+    SEXP ans = ScalarInteger(1);
+    PROTECT(ans);
+    char *className = "xyz";
+    if(LOGICAL(x)[0])
+	className = "abc";
+     
+    SET_CLASS(ans, ScalarString(mkChar(className)));
+    UNPROTECT(1);
+    return(ans);
+}
+
+SEXP
+R_foo10(SEXP x)
+{
+    SEXP ans = ScalarInteger(1);
+    PROTECT(ans);
+    char *className = "xyz";
+    if(LOGICAL(x)[0])
+	SET_CLASS(ans, ScalarString(mkChar(className)));
+    else
+	SET_CLASS(ans, GET_CLASS(x));
+    UNPROTECT(1);
+    return(ans);
+}
