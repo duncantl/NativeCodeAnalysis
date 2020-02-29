@@ -2,6 +2,9 @@
 getRReturnTypes =
 function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = character())
 {
+    if(is.null(fun))
+        stop("passed NULL for routine")
+    
     id = getName(fun)
     if(id %in% stack) {
         warning("recursively processing ", id)
@@ -24,21 +27,35 @@ function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = ch
         warning("more than one return value!")
 
     ret = ret[[1]]
-    if(is(ret, "PHINode"))
-        lapply(ret[], pAllocVector, module = module, stack = stack)
-    else
-       pAllocVector(ret, module, stack = stack)
+    pAllocVector(ret, module, stack = stack)    
 }
 
 
 pAllocVector =
 function(x, module, stack = character()) 
 {
+    if(is(x, "PHINode"))
+        return(lapply(x[], pAllocVector, module = module, stack = stack))
+
+    
     if(is(x, "CallInst")) {
         fname = getName(getCalledFunction(x))
-        if(fname %in% c("Rf_allocVector3", "Rf_allocVector"))
-            return(structure(list(type = getRType(getValue(x[[1]])), length = x[[2]]), class = "RVectorType"))
+        if(fname %in% c("Rf_allocVector3", "Rf_allocVector")) {
+            ans = structure(list(type = getRType(getValue(x[[1]])), length = mkLength(x[[2]])), class = "RVectorType")
+            if(ans$type == "list") 
+                ans$elTypes = getElementTypes(x, module)
 
+            return(ans)
+        }
+
+        if(fname %in% c("Rf_allocMatrix")) {
+            ans = structure(list(type = "Matrix",
+                                 elType = getRType(getValue(x[[1]])),
+                                 dim = lapply(x[2:3], mkLength)),
+                            class = "RMatrixType")
+            return(ans)
+        }
+        
         if(grepl('^Rf_Scalar', fname)) {
             ty = switch(fname,
                         Rf_ScalarReal = "numeric",
@@ -55,7 +72,6 @@ function(x, module, stack = character())
     } else if(is(x, "LoadInst"))
         return(pAllocVector(x[[1]], module, stack))
     else if(is(x, "AllocaInst")) {
-#        browser()
         u = getAllUsers(x)
         u = u[!sapply(u, isLoadReturn)]
         lapply(u, pAllocVector, module)
@@ -79,4 +95,105 @@ isLoadReturn =
 function(x)
 {
    is(x, "LoadInst") &&  getName(x[[1]]) == "retval"
+}
+
+
+
+getElementTypes =
+    # x is the call to Rf_allocVector() or similar
+    # So we want to find the expressions that insert elements
+    # and what types those values being inserted are.
+function(x, module, uses = getAllUsers(x))
+{
+    w = sapply(uses, function(x) is(x, "CallInst") && getCallName(x) == "SET_VECTOR_ELT")
+    sets = uses[w]
+    ans = lapply(sets, function(x) pAllocVector(x[[3]], module))
+    browser()    
+    idx = sapply(sets, function(x) asIndex(x[[2]]))
+    if(is(idx, "numeric"))
+       ans = ans[order(idx)]
+    
+    ans    
+}
+
+asIndex =
+function(x)    
+{
+    x = unravel(x)
+    if(is(x, "Constant"))
+        return(getValue(x))
+
+    x
+}
+
+unravel =
+function(x)
+{
+    if(is(x, "CastInst"))
+        x = x[[1]]
+
+    if( is(x, "LoadInst"))
+        x = x[[1]]
+    
+    x
+}
+
+
+mkLength =
+    #
+    #
+    #
+function(x)
+{
+    x = unravel(x)
+browser()
+    if(is(x, "CallInst")) {
+        rtn = getCallName(x)
+        if(rtn == "Rf_length")
+            return(structure(list(expr = x[[1]]), class = "LengthOf"))
+        else {
+            if(rtn %in% c("INTEGER", "LOGICAL", "REAL")) {
+               return(getElementOf(x))
+
+            } else
+               x
+        }
+    } else if(is(x, "Constant"))
+         # we may want to just return x as it has the precise type e.g. int64.
+        structure(getValue(x), names = class(x), type = getType(x))
+    else if(is(x, "BinaryOperator")) {
+        lens = lapply(x[], mkLength)
+        names(lens) = c("a", "b")
+          switch(names(getOpcode(x)),
+                 shl = substitute(2^a*b, lens),
+                 x
+               )
+    } else if(is(x, "GetElementPtrInst")) {
+        gteElementOf(x)
+        i = mkLength(x[[2]])
+        val = x[[1]]
+        browser()
+        if(is(val, "CallInst") && getCallName(val) %in% c("INTEGER", "LOGICAL", "REAL"))
+            val = val[[1]]
+        
+        if(is(val, "CallInst") && getCallName(val) %in% c("VECTOR_ELT")) 
+            val = structure(list(obj = val[[1]], index = mkLength(val[[2]])), class = "ElementOf")
+        
+        structure(list(obj = val, index = i),  class = "ElementOf")
+    } else
+        x
+}
+
+
+gteElementOf =
+function(x)
+{
+    val = x[[1]]
+    idx = 0
+
+    if(is(x, "GetElementPtrInst")) {
+
+    }
+    
+    structure(list(obj = val, index = idx),  class = "ElementOf")
 }
