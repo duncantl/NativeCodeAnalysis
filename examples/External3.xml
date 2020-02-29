@@ -1,0 +1,29 @@
+<section>
+<title></title>
+
+
+<para>
+  The fastmatch package has one call to .External
+  It calls a routine in ctapply.c.
+  When we generate the IR file, we don't see any calls
+  to CAR and CDR. This is  because that file
+  defines USE_RINTERNALS so the computations from the macros are inlined
+  rather than calls to CAR and CDR routines.
+  We can either deal with those or comment out the line that defines USE_RINTERNALS.
+</para>
+
+
+<para>
+<r:code>
+library(Rllvm)
+library(NativeCodeAnalysis)
+f = "~/CRAN/Pkgs/fastmatch/src/ctapply.ir"
+m = parseIR(f)
+</r:code>
+
+<r:code>
+f = m$ctapply_
+ty = inferExternalParamTypes(f)
+</r:code>
+</para>
+</section>

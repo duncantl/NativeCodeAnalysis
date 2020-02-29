@@ -1,0 +1,129 @@
+<section>
+<title></title>
+
+<para>
+Consider the cusp package.
+It has three <r:func>.External</r:func> calls
+and each calls the <c:func>cuspnc</c:func> routine.
+In that routine, we see
+<c:code>
+args = CDR(args);
+alpha = CAR(args); args = CDR(args);
+beta  = CAR(args); args = CDR(args);
+bound = asReal(CAR(args)); args = CDR(args);
+inf = asInteger(CAR(args)); args = CDR(args);
+epsabs = asReal(CAR(args)); args = CDR(args);
+epsrel = asReal(CAR(args)); args = CDR(args);
+limit = asInteger(CAR(args)); args = CDR(args);
+</c:code>
+The result of last CDR call is never used
+and this is most likely just a cut-and-paste that should be removed.
+</para>
+<para>
+  The first <c:func>CDR</c:func> just skips the first element of <c:arg>args</c:arg>
+  which is the name of the routine being called.
+  There are 7 elements in <c:arg>args</c:arg> and
+  these are extracted and stored sequentially in a common and simple manner.
+  So these are easy to identify.
+  <r:func>inferExternalParameterTypes</r:func> does a good job
+  on identifying these and finding their types
+<r:code>
+m = parseIR("~/CRAN/Pkgs/cusp/src/cusp.nc.ir")
+a = inferExternalParamTypes(m$cuspnc)
+<r:output><![CDATA[
+[[1]]
+[[1]]$type
+  REALSXP 
+"numeric" 
+
+[[1]]$length
+[1] NA
+
+
+[[2]]
+[[2]]$type
+  REALSXP 
+"numeric" 
+
+[[2]]$length
+[1] NA
+
+
+[[3]]
+$type
+Rf_asReal 
+       14 
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+
+[[4]]
+$type
+Rf_asInteger 
+          13 
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+
+[[5]]
+$type
+Rf_asReal 
+       14 
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+
+[[6]]
+$type
+Rf_asReal 
+       14 
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+
+[[7]]
+$type
+Rf_asInteger 
+          13 
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+]]></r:output>
+</r:code>
+The final 5 elements are coerced to scalar values and we know their types.
+The first two correspond to the <c/> variables <c:var>alpha</c:var> and <c:var>beta</c:var>.
+We know these are expected to be numeric  vectors.
+</para>
+<para>
+What are the lengths/dimensions of these first two arguments?
+Manually looking at the code, we can see
+that there is a test that both have the same length:
+<c:code>
+if(length(alpha) != length(beta)) 
+    error("alpha and beta should have the same length");
+</c:code>
+Additionally, we have the loop
+<c:code>
+  for(int i=0;i<n;i++){
+      par.alpha = REAL(alpha)[i];
+      par.beta  = REAL(beta)[i];
+   }
+</c:code>
+How do we programmatically determine these (are used as if they) have the same length?
+</para>
+</section>

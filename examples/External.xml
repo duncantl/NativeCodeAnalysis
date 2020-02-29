@@ -5,6 +5,14 @@
 	 xmlns:cpp="http://www.C++.org">
 <title>.External</title>
 
+
+<para>
+  Here, we look at the .External calls.
+  The packages that use these are listed in the
+  ../Notes/README.md file. 
+</para>
+
+
 <para>
   Consider the devEMF package. It has one .External call.
   We install it and then we create the ir file
@@ -114,9 +122,5 @@ atypes = inferExternalParamTypes(mod$devEMF)
 now gives the correct results!
 And it tallies with the R code and the default values for the R function.
 </para>
-
-
-
-
 
 </section>

@@ -1,0 +1,18 @@
+<section>
+<title></title>
+
+<para>
+
+<r:code>
+library(Rllvm)
+library(NativeCodeAnalysis)
+f = "~/CRAN/Pkgs/RPostgreSQL/src/RS-pgsql-pqexecparams.ir"
+m = parseIR(f)
+</r:code>
+
+<r:code>
+f = m$RS_PostgreSQL_pqexecparams
+ty = inferExternalParamTypes(f)
+</r:code>
+</para>
+</section>
