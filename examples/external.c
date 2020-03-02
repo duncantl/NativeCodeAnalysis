@@ -11,3 +11,11 @@ R_External(SEXP args)
 
     return(d);
 }
+
+
+SEXP
+R_externalPtr(SEXP x)
+{
+    void *p = R_ExternalPtrAddr(x);
+    return(R_NilValue);
+}
