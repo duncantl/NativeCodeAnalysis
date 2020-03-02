@@ -33,6 +33,8 @@ allCalls = do.call(rbind, ans2[!e])
 allCalls$pkg = dirname(dirname(gsub("^\\./", "" , allCalls$file)))
 saveRDS(allCalls, "AllNativeCalls.rds")
 ```
+(See /Users/duncan/CRAN/Pkgs/AllNativeCalls.rds)
+
 
 `getCCalls` loops over the files in the R/ directory of the specified package.
 It parses the code in each file and finds all calls to .C, .Call, .External, .External2, .Fortran.
