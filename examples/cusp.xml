@@ -28,6 +28,7 @@ and this is most likely just a cut-and-paste that should be removed.
   <r:func>inferExternalParameterTypes</r:func> does a good job
   on identifying these and finding their types
 <r:code>
+library(Rllvm); library(NativeCodeAnalysis)    
 m = parseIR("~/CRAN/Pkgs/cusp/src/cusp.nc.ir")
 a = inferExternalParamTypes(m$cuspnc)
 <r:output><![CDATA[
@@ -126,4 +127,191 @@ Additionally, we have the loop
 </c:code>
 How do we programmatically determine these (are used as if they) have the same length?
 </para>
+
+
+<para>
+<r:code>
+p = getParameters(m$cuspnc)    
+u = getAllUsers(p[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %call = tail call %struct.SEXPREC* @CDR(%struct.SEXPREC* %args) #5"
+]]></r:output>
+</r:code>
+This is the first <c:func>CDR</c:func> to ignore the first  argument.
+So we look at the next uses of this.
+In fact, we can use <r:func>getAllCARUses</r:func> (not exported) in
+to get all the CAR calls:
+<r:code>
+cars = NativeCodeAnalysis:::getAllCARUses(p[[1]])
+</r:code>
+We can then get the uses of the first argument with
+<r:code>
+  u = getAllUses(cars[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %call23 = tail call i32 @Rf_length(%struct.SEXPREC* %call1) #5"
+
+[[2]]
+[1] "  %call26 = tail call i32 @Rf_length(%struct.SEXPREC* %call1) #5"
+
+[[3]]
+[1] "  %call49 = call double* @REAL(%struct.SEXPREC* %call1) #5"
+]]></r:output>  
+</r:code>
+The first of these corresponds to the <c:keyword>if</c:keyword> statement in the <c/> code.
+We can verify this via
+<r:code>
+getAllUsers(u[[1]])
+[[1]]
+[1] "  %cmp = icmp eq i32 %call23, %call24"
+</r:code>
+This compares Rf_length(alpha) to %call24. And that is
+<r:code>
+getAllUsers(u[[1]])[[1]][[2]]
+<r:output><![CDATA[
+[1] "  %call24 = tail call i32 @Rf_length(%struct.SEXPREC* %call3) #5"
+]]></r:output>
+</r:code>
+So we are comparing
+<r:code>
+a = u[[1]]
+b = getAllUsers(u[[1]])[[1]][[2]]
+</r:code>
+When the comparison is done, we use it in
+<r:code>
+getAllUsers(getAllUsers(u[[1]])[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  br i1 %cmp, label %if.end, label %if.then"
+]]></r:output>
+</r:code>
+We jump to the if.then block if the comparison of the two lengths is non-zero, i.e.,
+they are different.
+We can look at this block via
+<r:code>
+getBlocks(m$cuspnc)[["if.then"]]
+<r:output><![CDATA[
+[BasicBlock] %if.then
+  tail call void (i8*, ...) @Rf_error(i8* getelementptr inbounds ([43 x i8], [43 x i8]* @.str, i64 0, i64 0)) #6
+  unreachable
+]]></r:output>
+</r:code>
+We can verify that this throws an R error via
+<r:code>
+isErrorBlock(getBlocks(m$cuspnc)[["if.then"]])
+</r:code>
+</para>
+<para>
+How do we know what b is in this comparison?
+We can compare the argument in this call to Rf_length to all of the CAR calls
+<r:code>
+sapply(cars, identical, b[[1]])
+<r:output><![CDATA[
+[1] FALSE  TRUE FALSE FALSE FALSE FALSE FALSE
+]]></r:output>
+</r:code>
+So we see that this is where the <c:var>beta</c:var> variable is defined.
+Putting this together, we see we have a comparison between the lengths
+of two arguments which, if not equal, raises an error.
+</para>
+
+
+
+<para>
+When we switch to look  at the for loop, we use some of the
+same mechanisms.  We find where alpha and beta are used.
+<r:code>
+tmp = list(a = u1[[3]], b = u2[[2]])
+us = lapply(tmp, getAllUsers)
+<r:output><![CDATA[
+$a
+$a[[1]]
+[1] "  %arrayidx = getelementptr inbounds double, double* %call49, i64 %indvars.iv"
+
+
+$b
+$b[[1]]
+[1] "  %arrayidx53 = getelementptr inbounds double, double* %call51, i64 %indvars.iv"
+]]></r:output>
+</r:code>
+Here we see that we are accessing the objects in identical ways, i.e.,
+via a getelementptr instruction with the same index (%indvars.iv):
+<r:code>
+mapply(identical, us[[1]][[1]][], us[[2]][[1]][])
+</r:code>
+The first element is, of course, different but the indexing is the same.
+We have the equivalent of
+<r:code>
+  x[i]
+  y[i]
+</r:code>
+</para>
+<para>
+How do we detect that we are in a loop? and over what range of indices?
+We can find the name of the block in which these instructions are located/situated:
+<r:code>
+getName(getParent(us[[1]][[1]]))
+<r:output><![CDATA[
+[1] "for.body"
+]]></r:output>
+</r:code>
+LLVM will label all for loops with a for (?)
+</para>
+
+
+
+
+<para>
+  Probably a better way to determine whether two
+  arguments are expected to have the same length
+  is to copute the expected length of each
+  and then compare.  
+  For the <c:func>cuspnc</c:func> routine, we'll
+  get the two vector "arguments". These are used in the loop
+  within the routine.
+<r:code>
+args = getParameters(m$cuspnc)[[1]]
+cars = NativeCodeAnalysis:::getAllCARUses(args)
+</r:code>
+We call <r:func>inferLength</r:func> for the second of these:
+<r:code>
+ b = inferLength(cars[[2]])
+<r:output><![CDATA[
+[[1]]
+[[1]]$start
+[1] 0
+
+[[1]]$end
+$expr
+[1] "  %call1 = tail call %struct.SEXPREC.2* @CAR(%struct.SEXPREC.2* %call) #5"
+
+attr(,"class")
+[1] "LengthOf"
+]]></r:output>
+</r:code>
+This returns a list with one element. This gives the start of the loop 0,
+and a <r:class>LengthOf</r:class> object which contains the identity
+of the <r/> object whose length is used. As we expected, in this case,
+this is <r:expr eval="false">cars[[1]]</r:expr>, i.e. the <c:var>alpha</c:var> variable in
+the <c/> code.
+</para>
+<para>
+We can also get the length for <c:var>alpha</c:var>
+<r:code>
+a = inferLength(cars[[1]])
+</r:code>
+and compare the two
+<r:code>
+identical(a, b)
+</r:code>
+So these two arguments are expected to have the same length.
+</para>
+<para>
+ See loop.c and loop.R for additional examples.
+ The function <r:func>inferLength</r:func> attempts to handle
+ different ways of accessing elemeets in an <r/> object,
+ including vectors and lists.
+</para>
+
 </section>

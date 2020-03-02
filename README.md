@@ -14,15 +14,15 @@ accessible and extensible to others.
 
 The package provides protoypes for
 + identifying the R type of the return from a .Call() or .External() call, including
-   the types (and names) of the elements of a returned list;
-+ inferring the types of the parameters of a .Call() or .External() routine  based   on 
+   the types (and names) of the elements of a returned list (`getRReturnTypes()`);
++ inferring the types of the parameters of a .Call() or .External() routine based on 
   how each parameter is 
   + coerced (e.g. `Rf_asReal()`) or
   + accessed (e.g. `INTEGER(x)[0]` or `VECTOR_ELT(x, 0))`,  or
   + used, e.g., `SET_NAMES(ans, x)`;
-+ determining the length/dimension of an R object based on the code that  constructs it
-  or how it is used in the routine;
-+ finding  the class of the return value.
++ determining the length/dimension of an R object based on the code that constructs it
+  or how it is used in the routine (`inferLength()` and `inferParamTypes()`);
++ finding the class of the return value (`getReturnClass()`).
   
 We can also borrow information from the R code that calls a routine
 to see how it coerces the arguments to different types and what length/dimension
