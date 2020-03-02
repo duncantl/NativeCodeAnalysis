@@ -36,6 +36,10 @@ function(p)
         return(ans)
     
 
+    if("R_ExternalPtrAddr" %in% ku)
+        return(structure(list(type = "ExternalPtr"), class = "RExternalPtrType"))
+
+    
     if(!is.na(k) && "TYPEOF" %in% k) {
             tyu = getAllUsers(users[ k == "TYPEOF" ])
             w = sapply(tyu, function(x) if(is(x, "ICmpInst")) lapply(x[], function(x) if(is(x, "ConstantInt")) getValue(x)))
@@ -87,15 +91,6 @@ function(p)
     ans
 }
 
-
-getCallName =
-function(ins)
-{
-    if(!is(ins, "CallInst"))
-        return(NA)
-
-    getName(getCalledFunction(ins))
-}
 
 
 KnownRoutines = 

@@ -150,7 +150,7 @@ function(x)
     if(is(x, "CallInst")) {
         rtn = getCallName(x)
         if(rtn == "Rf_length")
-            return(structure(list(expr = x[[1]]), class = "LengthOf"))
+            return(LengthOf(x[[1]]))
         else {
             if(rtn %in% c("INTEGER", "LOGICAL", "REAL")) {
                return(getElementOf(x))
