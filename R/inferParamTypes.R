@@ -46,12 +46,23 @@ function(p)
             ans = tyu[w]
         }
 
+
+    if(any(ku %in% "Rf_coerceVector")) {
+        w = k == "Rf_coerceVector"
+        ty = sapply(users[w], function(x) getValue(x[[2]]))
+        i = match(ty, RSEXPTypeValues.df$typeNum)
+        names(ty) = RSEXPTypeValues.df$rtypeName[i]
+        return(structure(list(type = ty, length = NA), class = c("RVectorType")))
+    }
+    
     RAsRoutines = c("Rf_asChar" = 16L, "Rf_asReal" = 14L, "Rf_asInteger" = 13L, "Rf_asLogical" = 10L)
+                    
     if(any(w <- (ku %in% names(RAsRoutines)))) {
         if(!all(w))
             warning("not all routine call names in Rf_as*")
         kalls = intersect(names(RAsRoutines), ku)
-        return(structure(list(type = RAsRoutines[kalls], length = 1), class = c("RScalarType", "RVectorType")))
+        ty = RAsRoutines[kalls]
+        return(structure(list(type = ty, length = 1), class = c("RScalarType", "RVectorType")))
     }
 
     if(is.null(ans)) {
