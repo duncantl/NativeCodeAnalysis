@@ -54,7 +54,7 @@ We should probably add the name of the function.
 
 Excluding the 100 packages for which we got an error from rstatic
 (due to expressions of the form `foo::fun(call) = value`)
-we have 38,608 calls t native routines
+we have 38,608 calls to native routines
 ```
 table(allCalls$callType)
 
