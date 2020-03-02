@@ -1,10 +1,17 @@
 inferLength =
+    #
+    # p is an Argument/Parameter of a routine.
+    #
 function(p)
 {
    u = getAllUsers(p)
    w = sapply(u, isElementAccessor)
-   if(!any(w))
-       return(NA)
+   if(!any(w)) {
+       if(all(sapply(u, is, "LoadInst")) && !isSEXPType(getType(p)))
+           return(structure(1L, class = "RScalarType"))
+       else
+           return(NA)
+   }
 
    ans = lapply(u[w], findElAccessLength)
    names(ans) = sapply(u[w], as, "character")
@@ -17,6 +24,10 @@ function(p)
 
 
 isElementAccessor =
+    #
+    # Determines whether this instruction access elements of an R object
+    # This is not for .C() calls, but .Call() and .External() routines working
+    # on SEXP objects.
 function(ins)
 {
     if( is(ins, "CallInst") ) {
@@ -33,6 +44,10 @@ function(ins)
 
 
 findElAccessLength =
+    #
+    # Determines the symbolic length of the object being accessed in ins.
+    # Again, this is for SEXP objects, not primitive C types in .C() routines.
+    # 
 function(ins)
 {
     idx = NULL
@@ -56,8 +71,17 @@ function(ins)
 
 
 findIndexRange =
+    #
+    # varName not currently used.
+    #
 function(ins, varName)
 {
+    if(is(ins, "GetElementPtrInst"))
+        ins = ins[[2]]
+    
+    if(is(ins, "PHINode"))
+        return(structure(lapply(ins[], findIndexRange, varName), names = c("start", "end")))
+    
     if(is(ins, "Constant"))
         return( getValue(ins) )
 
@@ -80,8 +104,13 @@ function(ins)
     w = !sapply(cond[], identical, ins)
     o = cond[[ which(w) ]]
 
-    if(is(o, "CastInst"))
-        o = o[[1]]
+    o = NativeCodeAnalysis:::unravel(o)
+
+#   if(is(o, "LoadInst"))
+#      o = o[[1]]
+#
+#   if(is(o, "CastInst"))
+#       o = o[[1]]
 
     if(is(o, "CallInst")) {
         fn = getCallName(o)
@@ -91,6 +120,10 @@ function(ins)
             return(LengthOf(arg))
         }
     }
+
+    if(is(o, "Argument"))
+        return(structure(list(variable = getName(o)), class = "LengthFromArgument"))
+    
     browser()
 }
 
