@@ -20,6 +20,9 @@ ir: $(IR)
 %.ir: %.cpp
 	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) -c $< -o $@
 
+%.ir: %.cc
+	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) -c $< -o $@
+
 
 ir:
 	echo "$(IR)"
