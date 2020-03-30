@@ -4,7 +4,7 @@
 <title><r:func>.C</r:func> Routines</title>
 
 <para>
-  Consider
+Consider
 <c:code>
 void
 bar(int *x, int *len, int *ans)
@@ -19,7 +19,20 @@ We'll use a similar  approach to what we did for <r/> objects
 in <r:func>.Call</r:func> routines.
 That is, we find the places in the <c/> code where elements of each argument are
 accessed. Then we determine the range of these indices and then compare them.
+<r:func>inferLength</r:func> now does this, at least for the cases discussed here.
+So, we can use
+<r:code>
+library(Rllvm); library(NativeCodeAnalysis)
+rw = parseIR("readWrite.ir")  
+p = getParameters(rw$bar)
+lens = lapply(p, inferLength)
+</r:code>
+to get this information generally.
+However, in the discussion below, we show the details of the reasoning
+and the approach.
 </para>
+
+
 <para>
 We'll start with the simple variable <c:var>len</c:var>.
 <r:code>
@@ -56,6 +69,8 @@ lapply(getAllUsers(p$len), getAllUsers)
 </r:code>
 Again both work on the value of the parameter and not on elements of a vector.
 </para>
+
+
 <para>
 For the <c:var>x</c:var> parameter,
 we have
@@ -66,23 +81,12 @@ getAllUsers(p$x)
 [1] "  %arrayidx = getelementptr inbounds i32, i32* %x, i64 %indvars.iv"
 ]]></r:output>
 </r:code>  
-This is clearly accessing elements.
-Given this, we can use 
+This is clearly accessing elements from the pointer.
+This is similar to the <r:func>.Call</r:func> case
+where we deal with <c:func>REAL</c:func>, <c:func>INTEGER</c:func>, etc.
+and then access the <c/> elements from these pointers.
 </para>
 
-
-<para>
-We can determine which vectors have their elements modified
-and are "intended"  to deliver the results from the routine:
-<r:code>
-sapply(getParameters(rw$bar), onlyReadsMemory)
-<r:output><![CDATA[
-    x   len   ans 
- TRUE  TRUE FALSE 
-]]></r:output>
-</r:code>
-So this is just <c:var>ans</c:var> as we can easily determine directly.
-</para>
 
 
 <para>
@@ -112,10 +116,23 @@ findIndexRange(u)
 
 
 
-
-
 <section>
-<title></title>
+<title>Determining the Parameter Containing Results</title>
+<para>
+We can determine which vectors have their elements modified
+and are "intended"  to deliver the results from the routine:
+<r:code>
+sapply(getParameters(rw$bar), onlyReadsMemory)
+<r:output><![CDATA[
+    x   len   ans 
+ TRUE  TRUE FALSE 
+]]></r:output>
+</r:code>
+So it is just <c:var>ans</c:var> in this case that contains the results
+which we can easily determine directly by looking at the code, but have
+done so programmatically.
+</para>
+
 
 <para>
 Consider
@@ -137,7 +154,147 @@ sapply(getParameters(rw$foo), onlyReadsMemory)
 FALSE  TRUE 
 ]]></r:output>
 </r:code>
+So again, we can find the results parameters.
 </para>
 </section>
+
+<section>
+<title>The <r:pkg>bamp</r:pkg> Package</title>
+
+<para>
+  The <r:pkg>bamp</r:pkg> package has a single <r:func>.C</r:func>
+  call to  a routine named <c:func>bamp</c:func> in
+  <file>bamp.cc</file>.
+  We generate the <ir/> for this file and use
+<r:code>
+m = parseIR("~/CRAN/Pkgs/bamp/src/bamp.ir")
+p = getParameters(m$bamp)  
+lens = lapply(, inferLength)
+</r:code>  
+to get the lengths.
+</para>
+
+
+<para>
+  Consider the parameter ttt.
+  We end up in a circular loop.
+<r:code>
+getAllUsers(p$ttt)
+<r:output><![CDATA[
+[1] "  %scevgep = getelementptr double, double* %ttt, i64 %691, !dbg !2487"
+]]></r:output>
+getAllUsers(p$ttt)[[1]][[2]]
+<r:output><![CDATA[
+[1] "  %691 = sext i32 %ttt_c.02618 to i64, !dbg !2487"
+]]></r:output>
+u1 = getAllUsers(p$ttt)[[1]][[2]][[1]]
+<r:output><![CDATA[
+[1] "  %ttt_c.02618 = phi i32 [ 0, %for.body376.lr.ph ], [ %ttt_c.2, %for.inc1420 ]"
+]]></r:output>
+u2 = u1[[2]]
+<r:output><![CDATA[
+[1] "  %ttt_c.2 = phi i32 [ %ttt_c.1.lcssa, %for.cond.cleanup1303 ], [ %ttt_c.02618, %if.end1008 ], !dbg !2683"
+]]></r:output>
+</r:code>  
+The final two uses show the circularity – %ttt_c.02618 references
+%ttt_c.2 which references %ttt_c.02618.
+However, these do have different block labels/identifiers in the two PHI nodes.
+This corresponds to the code
+<r:code>
+for (int h=0; h< number_of_agegroups;h++)
+{
+     ttt[ttt_c]=theta[h];
+     ttt_c++;
+}
+</r:code>
+which is the only use of (the elements of) <c:var>ttt</c:var>.
+Note that this is inside the <c:kwd>if</c:kwd>
+<c:code>
+if(iteration>burn_in && fmod((double)iteration,(double)abstand)==0.0)
+</c:code>
+</para>
+
+
+
+<para>
+We can get the blocks for each phi node with, e.g.,
+<r:code>
+  blocks(u2)
+<r:output><![CDATA[
+[[1]]
+[BasicBlock] %for.cond.cleanup1303
+  %inc1418 = add nsw i32 %gen_c.02619, 1, !dbg !2647
+  br label %for.inc1420, !dbg !2648
+
+[[2]]
+[BasicBlock] %if.end1008
+  %cmp1009 = icmp sgt i32 %iteration.4, %25, !dbg !2451
+  %fmod1013 = frem double %conv1001, %conv1002, !dbg !2452
+  %cmp1014 = fcmp oeq double %fmod1013, 0.000000e+00, !dbg !2453
+  %or.cond2492 = and i1 %cmp1009, %cmp1014, !dbg !2454
+  br i1 %or.cond2492, label %if.then1015, label %for.inc1420, !dbg !2454
+]]></r:output>  
+</r:code>
+</para>
+
+
+
+<para>
+  We are indexing <c:var>ttt</c:var> with the value of %ttt_c.02618
+  and this is either 0 or %ttt_c.2 coming from for.inc1420.
+  And this second possible value is
+  either
+  %ttt_c.1.lcssa from %for.cond.cleanup1303 or  %ttt_c.02618 from %if.end1008.
+  And these two possible values correspond to
+<r:code>
+u2[]
+<r:output><![CDATA[
+[[1]]
+[1] "  %ttt_c.1.lcssa = phi i32 [ %ttt_c.02618, %for.cond.cleanup1060 ], [ %703, %for.cond.cleanup1089.loopexit ], [ %ttt_c.02618, %for.cond.cleanup1060.thread ]"
+
+[[2]]
+[1] "  %ttt_c.02618 = phi i32 [ 0, %for.body376.lr.ph ], [ %ttt_c.2, %for.inc1420 ]"
+]]></r:output>  
+</r:code>
+Here we see the circularity with the reference to %ttt_c.2 in for.inc1420.
+So the second of these is either 0 or a circular reference to our earlier value.
+The first element has three blocks feeding into the phi node.
+<r:code>
+  u2[[1]][]
+<r:output><![CDATA[
+[[1]]
+[1] "  %ttt_c.02618 = phi i32 [ 0, %for.body376.lr.ph ], [ %ttt_c.2, %for.inc1420 ]"
+
+[[2]]
+[1] "  %703 = trunc i64 %indvars.iv.next2817.lcssa to i32"
+
+[[3]]
+[1] "  %ttt_c.02618 = phi i32 [ 0, %for.body376.lr.ph ], [ %ttt_c.2, %for.inc1420 ]"
+]]></r:output>  
+</r:code>
+The 2 phi nodes are either 0 or the original ttt_c.2 in for.inc1420.
+The middle element is a regular instruction but its first operand corresponds to a phi node.
+<r:code>
+u2[[1]][[2]][[1]]
+<r:output><![CDATA[
+[1] "  %indvars.iv.next2817.lcssa = phi i64 [ %697, %middle.block3013 ], [ %indvars.iv.next2817, %for.body1090 ]"
+]]></r:output>
+</r:code>
+</para>
+
+
+<para>
+  This is becoming a mess. This is partially because the code is "unusual".
+  It appears that the variable with which we are indexing <c:var>ttt</c:var>, i.e., <c:var>ttt_c</c:var>
+  is always increasing across iterations within an outer loop.
+  It is very hard to see as the structure of the code is flat and not hierarchically indented.
+  However, the real point is that if we look at the <r/> code that calls this routine,
+  we can determine the length of the arguments.
+</para>
+
+
+
+</section>
+
 
 </section>
