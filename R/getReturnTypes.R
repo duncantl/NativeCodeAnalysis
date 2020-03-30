@@ -126,17 +126,6 @@ function(x)
     x
 }
 
-unravel =
-function(x)
-{
-    if(is(x, "CastInst"))
-        x = x[[1]]
-
-    if( is(x, "LoadInst"))
-        x = x[[1]]
-    
-    x
-}
 
 
 mkLength =
