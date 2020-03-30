@@ -57,6 +57,7 @@ function(ins)
             idx = ins[[2]]
         } else 
             return(lapply(getAllUsers(ins), findElAccessLength))
+        
     } else if(is(ins, "GetElementPtrInst")) {
         idx = ins[[2]]
     }
@@ -64,9 +65,19 @@ function(ins)
     if(is.null(idx))
         return(NA)
 
+    if(is(idx, "CastInst"))
+        idx = idx[[1]]
+    
     var = getName(idx)
     if(is(idx, "PHINode"))
-        structure(lapply(idx[], findIndexRange, var), names = c("start", "end")) # order may not be always correct. Just putting names here to make it easier to understand what we are looking at in the output.
+        # order may not be always correct.
+        # Just putting names here to make it easier to understand what we are looking at in the output.
+       return(structure(lapply(idx[], findIndexRange, var), names = c("start", "end")) ) 
+
+    else if(is(idx, "Constant"))
+        return(getValue(idx))
+
+    browser()
 }
 
 
@@ -76,9 +87,14 @@ findIndexRange =
     #
 function(ins, varName)
 {
+   
+     # This sends inferLength(p$population) for bamp in bamp/src/bamp.ir into infinite loop.
+    if(is(ins, "CastInst"))
+        ins = ins[[1]]
+    
     if(is(ins, "GetElementPtrInst"))
         ins = ins[[2]]
-    
+   
     if(is(ins, "PHINode"))
         return(structure(lapply(ins[], findIndexRange, varName), names = c("start", "end")))
     
