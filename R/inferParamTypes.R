@@ -52,7 +52,8 @@ function(p)
         ty = sapply(users[w], function(x) getValue(x[[2]]))
         i = match(ty, RSEXPTypeValues.df$typeNum)
         names(ty) = RSEXPTypeValues.df$rtypeName[i]
-        return(structure(list(type = ty, length = NA), class = c("RVectorType")))
+        return(structure(list(type = ty, length = NA), class = c("RVectorType")))  # Capture coercion.
+                    # capture that the use of this Value has an implicit length.
     }
     
     RAsRoutines = c("Rf_asChar" = 16L, "Rf_asReal" = 14L, "Rf_asInteger" = 13L, "Rf_asLogical" = 10L)
