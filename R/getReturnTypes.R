@@ -108,8 +108,8 @@ function(x, module, uses = getAllUsers(x))
     w = sapply(uses, function(x) is(x, "CallInst") && getCallName(x) == "SET_VECTOR_ELT")
     sets = uses[w]
     ans = lapply(sets, function(x) pAllocVector(x[[3]], module))
-    browser()    
-    idx = sapply(sets, function(x) asIndex(x[[2]]))
+#    browser()    
+    idx = sapply(sets, function(x) asIndex(x[[2]]))  # Handle symbolic values SET_VECTOR_ELT(x, i++, value).  if() statements.
     if(is(idx, "numeric"))
        ans = ans[order(idx)]
     
@@ -154,7 +154,7 @@ function(x)
         lens = lapply(x[], mkLength)
         names(lens) = c("a", "b")
           switch(names(getOpcode(x)),
-                 shl = substitute(2^a*b, lens),
+                 shl = substitute(2^a*b, lens),  # How does this map to typesys.
                  x
                )
     } else if(is(x, "GetElementPtrInst")) {
