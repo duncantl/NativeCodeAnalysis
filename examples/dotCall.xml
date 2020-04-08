@@ -1,0 +1,205 @@
+<doc
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:c="http://www.C.org"
+	 xmlns:ir="http://llvm.org/ir">
+<section>
+<title></title>
+
+<para>
+
+</para>
+</section>
+
+<section>
+<title>Setting Elements with a Counter Variable</title>
+
+<para>
+  Consider the code
+<c:code>
+  i = 0;
+  SET_VECTOR_ELT(ret, i++, pi);
+  SET_VECTOR_ELT(ret, i++, Mu);
+  SET_VECTOR_ELT(ret, i++, LTSigma);
+  SET_VECTOR_ELT(ret, i++, llhdval);
+  SET_VECTOR_ELT(ret, i++, conv_iter);
+  SET_VECTOR_ELT(ret, i++, conv_eps);
+
+  for(i = 0; i < 6; i++){
+    SET_STRING_ELT(ret_names, i, mkChar(names[i])); 
+  }
+  setAttrib(ret, R_NamesSymbol, ret_names);
+</c:code>
+in R_emcluster.c in the EMCluster package.
+It may appear that we have to track the incrementing of i in the calls to
+SET_VECTOR_ELT. Also, we have to deal with the loop to track the calls to SET_STRING_ELT.
+However, <llvm/> unrolls these loops
+so in the <ir/> code, we have
+<ir:code>
+  %call24 = tail call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call19, i64 0, %struct.SEXPREC* %call4) #3
+  %call27 = tail call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call19, i64 1, %struct.SEXPREC* %call7) #3
+  ...
+  %call36 = tail call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call19, i64 4, %struct.SEXPREC* %call15) #3
+  %call39 = tail call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call19, i64 5, %struct.SEXPREC* %call17) #3  
+</ir:code>
+and
+<ir:code>
+  tail call void @SET_STRING_ELT(%struct.SEXPREC* %call21, i64 0, %struct.SEXPREC* %call42) #3
+  %call42.1 = tail call %struct.SEXPREC* @Rf_mkChar(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str.1, i64 0, i64 0)) #3
+  tail call void @SET_STRING_ELT(%struct.SEXPREC* %call21, i64 1, %struct.SEXPREC* %call42.1) #3
+  %call42.2 = tail call %struct.SEXPREC* @Rf_mkChar(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @.str.2, i64 0, i64 0)) #3
+  tail call void @SET_STRING_ELT(%struct.SEXPREC* %call21, i64 2, %struct.SEXPREC* %call42.2) #3
+  ...
+  %call42.5 = tail call %struct.SEXPREC* @Rf_mkChar(i8* getelementptr inbounds ([9 x i8], [9 x i8]* @.str.5, i64 0, i64 0)) #3
+  tail call void @SET_STRING_ELT(%struct.SEXPREC* %call21, i64 5, %struct.SEXPREC* %call42.5) #3  
+</ir:code>
+</para>
+
+
+<para>
+  It is a problem when we use the counter to potentially skip over an element.
+  For example, in the package RXCEcolInf and its exitpoll.c file,
+  we have
+<c:code>
+  listlength = 8;
+  if (how_many_THETAS) 
+    listlength++;
+  if (how_many_NN_internals) 
+    listlength++;
+
+  SEXP list_ret;
+  PROTECT(list_ret = allocVector(VECSXP, listlength));
+  nProtected++;
+  SET_VECTOR_ELT(list_ret, 0, R_draw_list);
+  SET_VECTOR_ELT(list_ret, 1, acc_THETAS_t_vec_ret);
+  SET_VECTOR_ELT(list_ret, 2, acc_THETAS_Diri_vec_ret);
+  SET_VECTOR_ELT(list_ret, 3, vld_NNs_multinom_mat_ret);
+  SET_VECTOR_ELT(list_ret, 4, acc_NNs_multinom_mat_ret);
+  SET_VECTOR_ELT(list_ret, 5, R_table_nrows);
+  SET_VECTOR_ELT(list_ret, 6, R_table_ncols);
+  nextplace = 7;
+  if (how_many_THETAS){
+    SET_VECTOR_ELT(list_ret, nextplace, THETAS_save_ret);
+    nextplace++;
+  }
+  if (how_many_NN_internals){
+    SET_VECTOR_ELT(list_ret, nextplace, NNs_save_ret);
+    nextplace++;
+  }
+  SET_VECTOR_ELT(list_ret, nextplace, R_restart_list);
+</c:code>
+So the list has length 8, but it could be 9 or 10, depending on whether
+how_many_THETAS and how_many_NN_internals are true.
+
+</para>
+<para>
+  This code appears in the routine AnalyzeWithExitPoll.
+  This is a 800 lines of code!
+</para>
+<para>
+<r:code>
+rv = getReturnValues(m$AnalyzeWithExitPoll)  
+u = getAllUsers(rv[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %call984 = call %struct.SEXPREC* @Rf_protect(%struct.SEXPREC* %call983) #7"
+
+[[2]]
+[1] "  %call986 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 0, %struct.SEXPREC* %call682) #7"
+
+[[3]]
+[1] "  %call987 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 1, %struct.SEXPREC* %call336) #7"
+
+[[4]]
+[1] "  %call988 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 2, %struct.SEXPREC* %call339) #7"
+
+[[5]]
+[1] "  %call989 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 3, %struct.SEXPREC* %call350) #7"
+
+[[6]]
+[1] "  %call990 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 4, %struct.SEXPREC* %call352) #7"
+
+[[7]]
+[1] "  %call991 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 5, %struct.SEXPREC* %call783) #7"
+
+[[8]]
+[1] "  %call992 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 6, %struct.SEXPREC* %call791) #7"
+
+[[9]]
+[1] "  %call995 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 7, %struct.SEXPREC* %THETAS_save_ret.0) #7"
+
+[[10]]
+[1] "  %call1000 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 %nextplace.0, %struct.SEXPREC* %NNs_save_ret.0) #7"
+
+[[11]]
+[1] "  %call1003 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 %nextplace.1, %struct.SEXPREC* %R_restart_list.0) #7"
+
+[[12]]
+[1] "  %call1025 = call %struct.SEXPREC* @Rf_setAttrib(%struct.SEXPREC* %call983, %struct.SEXPREC* %154, %struct.SEXPREC* %call1004) #7"
+
+[[13]]
+[1] "  ret %struct.SEXPREC* %call983"
+]]></r:output>
+</r:code>
+So this teaches us that we have to check whether some of these uses are conditional.
+We can clearly see the nextplace.0 and nextplace.1 which are the updated values of nextplace.
+</para>
+<para>
+We'll look at the first of these conditional uses.  We can get the block in which it is located with 
+<r:code>
+getParent(u[[10]])
+<r:output><![CDATA[
+[BasicBlock] %if.then999
+  %call1000 = call %struct.SEXPREC* @SET_VECTOR_ELT(%struct.SEXPREC* %call983, i64 %nextplace.0, %struct.SEXPREC* %NNs_save_ret.0) #7
+  %inc1001 = add nuw nsw i64 %nextplace.0, 1
+  br label %if.end1002
+]]></r:output>
+</r:code>
+Firstly, from the name of this block
+<r:code>
+getName(getParent(u[[10]]))
+<r:output><![CDATA[
+[1] "if.then999"
+]]></r:output>
+</r:code>
+we can see this is the true  body of an if statement.
+The index in this call to SET_VECTOR_ELT is
+<r:code>
+b = getParent(u[[10]])
+b[[1]][[2]]
+<r:output><![CDATA[
+[1] "  %nextplace.0 = phi i64 [ 8, %if.then994 ], [ 7, %if.end974 ]"
+]]></r:output>
+</r:code>
+And this is the same value as being incremented in the next
+<r:code>
+identical(b[[2]][[1]], b[[1]][[2]])
+</r:code>
+We can get the predecessor block for <r:var>b</r:var> via
+<r:code>
+p = getPredecessor(b)
+</r:code>
+This is
+<r:output><![CDATA[
+[BasicBlock] %if.end997
+  %nextplace.0 = phi i64 [ 8, %if.then994 ], [ 7, %if.end974 ]
+  br i1 %tobool816, label %if.then999, label %if.end1002
+]]></r:output>
+We can see the incoming values of 7 and 8.
+We can query and extract thos  incoming values  for nextplace0 with
+<r:code>
+sapply(p[[1]][], getValue)
+<r:output><![CDATA[
+[1] 8 7
+]]></r:output>
+</r:code>
+So we know the index.
+However, we don't know the condition.
+We can get the incoming blocks
+<r:code>
+lapply(p[[1]], getIncomingBlock)
+</r:code>
+</para>
+
+
+</section>
+</doc>
