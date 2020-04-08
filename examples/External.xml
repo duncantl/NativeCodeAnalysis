@@ -15,7 +15,8 @@
 
 <para>
   Consider the devEMF package. It has one .External call.
-  We install it and then we create the ir file
+  We install the package and then we create the ir file
+  from within the devEMF/src/ directory with
 <sh:code>
 make -f ~/GitWorkingArea/NativeCodeAnalysis/examples/IRMakefile devEMF.ir    
 </sh:code>
