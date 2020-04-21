@@ -4,20 +4,24 @@ We have a mirror of CRAN. It is a little out of date at this time (Feb 10)
 having been updated in Dec. 2019. However, the approach and the general
 data are still representative.
 
+```
+find Pkgs -maxdepth 1 -type d | wc -l
+```
+
 We want to find all packages that have native code.
 While we could analyze all of the R code in each package,
 we'll start by finding each package that has a `useDynLib()`
 directive in its NAMESPACE file.
 We use the shell command
 ```
-find . -name NAMESPACE -maxdepth 2 -exec grep -l 'useDynLib(' {} \; > useDynLib.txt
+find Pkgs -name NAMESPACE -maxdepth 2 -exec egrep -l '^[^#]*useDynLib\(' {} \; > useDynLib.txt
 ```
-3494 of the 14,995 packages have this directive as we see from
+3,782 of the 16,161 packages have this directive as we see from
 ```
 wc -l useDynLib.txt 
 ```
 ```
-3494 useDynLib.txt
+3834 useDynLib.txt
 ```
 
 We will then examine only these:
@@ -48,7 +52,7 @@ it finds the
 + the PACKAGE argument
 + the name of the file in which the call was found.
 
-We should probably add the name of the function.
+We should probably add the name of the function in which the call is made.
 
 
 
@@ -169,3 +173,46 @@ Using the Rllvm approach, we need to have dependent libraries installed
 to generate the IR files.
 This is also true for the RCIndex approach, but RCIndex coontinues to parse if it 
 cannot find a header file.
+
+
+
+# Mapping Name of Routine in R to Native Code
+
+Packages can provide a mapping of routine names
+in various ways
+
+
+One way is to add a prefix and/or suffix for all routines.
+So if we specified `.fixes = c("C_", "_r")`,
+the call
+`.C("foo")` would map to C_foo_r.
+These pre-/sufffixes can be specified in the 
+
+We can find the pagkages that have a .fixes value in the o
+```
+for f in `cat useDynLib.txt` ; do ag -l \\.fixes $f ; done
+```
+
+
+
+# Registration Changes
+To find native registration routines that map 
+
+```
+for f in `cat useDynLib.txt | sed -e 's|/NAMESPACE|/src|g'` ; do ag -l R_registerRoutines $f ; done > registerRoutines.txt 
+```
+
+
+
+```
+make -f ~/GitWorkingArea/NativeCodeAnalysis/examples/IRMakefile native_routine_registration.ir
+```
+
+
+```
+library(Rllvm)
+m = parseIR("~/CRAN2/Pkgs/easyVerification/src/native_routine_registration.ir")
+u = getAllUsers(m$R_registerRoutines)
+
+u[[1]][-1]
+```
