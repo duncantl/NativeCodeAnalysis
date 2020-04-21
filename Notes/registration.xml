@@ -1,0 +1,106 @@
+<article
+	 xmlns:sh="http://www.shell.org"
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:c="http://www.C.org">
+<title>Querying Registration Information</title>
+<authorinfo>
+  <firstname>Duncan</firstname><lastname>Temple Lang</lastname>
+</authorinfo>
+
+
+<para>
+  We find which packages that use a shared library
+  contain a call to <c:func>R_registerRoutines</c:func>.
+<sh:code>
+for f in `cat useDynLib.txt | sed -e 's|/NAMESPACE|/src|g'` ; do ag -l R_registerRoutines $f ; done > registerRoutines.txt 
+</sh:code>
+</para>
+
+<para>
+  We take a look at one of these packages, <r:pkg>easyVerification</r:pkg>.
+  We generate the <ir/> code for the relevant <c/> file
+<sh:code>
+make -f ~/GitWorkingArea/NativeCodeAnalysis/examples/IRMakefile native_routine_registration.ir
+</sh:code>
+This may fail as the package may require configuration or additional headers from third-party libraries.
+We can try installing the package, but then we need to also install its dependencies and their dependencies first and so on.
+</para>
+
+<para>
+Next we read the <ir/> code and look for calls to R_registerRoutines
+<r:code>
+library(Rllvm)
+m = parseIR("~/CRAN2/Pkgs/easyVerification/src/native_routine_registration.ir")
+u = getAllUsers(m$R_registerRoutines)
+</r:code>
+There will typically be one call.
+And then we want to look at the second, third, fourth and fifth arguments
+corresponding to the <r:func>.C</r:func>, <r:func>.Call</r:func>, <r:func>.Fortran</r:func> and
+<r:func>.External</r:func> routines, respectively.
+We get these four arguments by ignoring the first argument,
+<r:code>
+a = u[[1]][-1]
+a = u[[1]][ - c(1, length(u[[1]]))]
+</r:code>
+<fix>The Function itself is included as the final element of u[[1]][]</fix>
+Often, some of these are <c:null/>.
+So we can identify these with
+<r:code>
+sapply(a, class)
+<r:output><![CDATA[
+[1] "ConstantPointerNull" "ConstantExpr"        "ConstantPointerNull"
+[4] "ConstantPointerNull"
+]]></r:output>
+</r:code>
+So only the second of these is not <c:null/>.
+So we get this <r:class>Value</r:class> with
+<r:code>
+v = u[[1]][[3]]
+<r:output><![CDATA[
+[1] "%struct.R_CallMethodDef* getelementptr inbounds ([4 x %struct.R_CallMethodDef], [4 x %struct.R_CallMethodDef]* @CallEntries, i64 0, i64 0)"
+]]></r:output>
+</r:code>
+This corresponds to the <c/> code
+<c:code>
+static const R_CallMethodDef CallEntries[] = {
+    {"easyVerification_EnsRocaCpp", (DL_FUNC) &easyVerification_EnsRocaCpp, 2},
+    {"easyVerification_rankCpp",    (DL_FUNC) &easyVerification_rankCpp,    1},
+    {"easyVerification_rankEnsCpp", (DL_FUNC) &easyVerification_rankEnsCpp, 1},
+    {NULL, NULL, 0}
+};
+</c:code>
+</para>
+
+<para>
+  Since this is a pointer, we get  the object with
+<r:code>
+v = v[[1]]
+</r:code>
+
+<fix>Why do we need another [[1]]</fix>
+The 
+<r:code>
+els = v[[1]][]
+</r:code>
+We can loop over the elements to find the final zero-initializer with
+<r:code>
+w = !sapply(els, is, "ConstantAggregateZero")
+els = els[w]
+</r:code>
+</para>
+<para>
+We can get the elements of each of these elements with
+<r:code>
+ids = sapply(els, function(x) as(x[[1]][[1]][[1]], "character"))
+rtns = sapply(els, function(x) getName(x[[2]][[1]]))
+</r:code>  
+</para>
+<para>
+Are any of these names different
+<r:code>
+all(ids == rtns)
+</r:code>
+</para>
+
+
+</article>
