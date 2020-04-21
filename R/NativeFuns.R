@@ -96,6 +96,8 @@ function(node)
             stop("Call but to what")
     } else if(is(def, "Brace") || is(def, "ArgumentList"))
         "<anonymous>"
+    else if(is(def, "Return"))
+        "<nested>"
     else
         stop("bob")
 }
