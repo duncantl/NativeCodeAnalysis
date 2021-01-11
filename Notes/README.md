@@ -61,45 +61,46 @@ Excluding the 100 packages for which we got an error from rstatic
 we have 38,608 calls to native routines
 ```
 table(allCalls$callType)
-
         .C      .Call  .External .External2   .Fortran 
-      7943      27620        277          4       2764 
+      8133      35888        278         11       2693 
 ```
-(The .External2 calls are from the rlang package.)
+(The .External2 calls are from the rlang and vctrs package.)
 
 The .External calls come from various packages
 ```
 sort(table(allCalls[allCalls$callType == '.External', "pkg"]))
-                 coxsei                  devEMF 
+            Pkgs/coxsei             Pkgs/devEMF 
                       1                       1 
-              dotCall64               fastmatch 
+         Pkgs/dotCall64          Pkgs/fastmatch 
                       1                       1 
-                 Matrix                  OpenCL 
+             Pkgs/mable           Pkgs/maptools 
                       1                       1 
-      RandomFieldsUtils                   RGtk2 
+            Pkgs/Matrix             Pkgs/OpenCL 
                       1                       1 
-                   slam              tikzDevice 
+ Pkgs/RandomFieldsUtils              Pkgs/RGtk2 
                       1                       1 
-                 bibtex expint/inst/example_API 
+              Pkgs/slam         Pkgs/tikzDevice 
+                      1                       1 
+             Pkgs/vctrs             Pkgs/bibtex 
+                      1                       2 
+           Pkgs/foreign              Pkgs/IHSEP 
                       2                       2 
-                foreign                   IHSEP 
+     Pkgs/lassoshooting        Pkgs/RPostgreSQL 
                       2                       2 
-          lassoshooting             RPostgreSQL 
+Pkgs/spatialsegregation         Pkgs/treethresh 
                       2                       2 
-     spatialsegregation              treethresh 
-                      2                       2 
-                   cusp                 iotools 
+              Pkgs/cusp            Pkgs/iotools 
                       3                       3 
-                 pbdMPI                     xts 
+            Pkgs/pbdMPI                Pkgs/xts 
                       4                       4 
-                 expint                    Rcpp 
+            Pkgs/expint               Pkgs/Rcpp 
                       6                      13 
-                   SGCS                  wrassp 
+              Pkgs/SGCS             Pkgs/wrassp 
                      13                      14 
-                 actuar 
+            Pkgs/actuar 
                     191 
 ```
-So 191/277 from one package actuar and in this package,
+So 191/278 from one package actuar and in this package,
 there are only 6 routines called and 154 of the 191 calls are to C_actuar_do_dpq.
 This is in actuar/src/dqp.c.
 
@@ -136,7 +137,7 @@ More calls do not have a PACKAGE argument than do, but it is very close:
 ```
 table(is.na(allCalls$package))
 FALSE  TRUE 
-18900 19708 
+20518 26485 
 ```
 
 
@@ -144,7 +145,7 @@ FALSE  TRUE
 PACKAGEnaByPkg = with(allCalls, tapply(package, pkg, function(x) table(is.na(x))))
 table(sapply(PACKAGEnaByPkg, length))
    1    2 
-3043  238 
+3415  267 
 ```
 So the overwhelming majority of packages are consistent in all calls within that package
 in either using a PACKAGE argument or not in all their calls.
