@@ -15,12 +15,19 @@ function(dir, files = list.files(dir, pattern = pattern, full.names = TRUE), byF
       data.frame(routine = unlist(toc), file = rep(files, sapply(toc, length)), stringsAsFactors = FALSE)
 }
 
+
+#setGeneric("getDefinedRoutines",
+#           function(x
+
 getDefinedRoutines =
     #
     # In the module, find the Functions that have a body.
     #
 function(file, module = parseIR(file), names = TRUE, dropInternal = TRUE)
 {
+    if(is(file, "Module") && missing(module))
+        module = file
+    
     funs = getModuleFunctions(module)
     if(length(funs) == 0)
         return(list())
