@@ -22,3 +22,9 @@ export(getDefinedRoutines)
 export(inferExternalParamTypes)
 
 export(getReturnValueNames)
+
+
+export(getCalls)
+exportMethods(getCalls)
+export(getSubclasses)
+
