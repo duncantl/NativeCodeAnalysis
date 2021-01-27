@@ -5,6 +5,8 @@ export(findInstructions)
 
 export(mkRoutineFileTOC)
 export(getRReturnTypes)
+export(compReturnType)
+
 
 export(getCalledRoutines)
 exportMethods(getCalledRoutines)
@@ -27,4 +29,6 @@ export(getReturnValueNames)
 export(getCalls)
 exportMethods(getCalls)
 export(getSubclasses)
+
+
 
