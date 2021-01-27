@@ -112,12 +112,33 @@ About 1/3 (12953) of the 36608 calls we found are in a file named RcppExports.R,
 indicating Rcpp. There may be others using Rcpp not in files with other names.
 
 ```
-lto = sapply(names(ans2), function(p) { d = read.dcf(file.path(p, "DESCRIPTION")); i =match("LinkingTo", colnames(d)); d[,i] })
+lto = sapply(names(ans2), function(p) { d = read.dcf(file.path(p, "DESCRIPTION")); i = match("LinkingTo", colnames(d)); d[,i] })
 table(is.na(lto)
 FALSE  TRUE 
  1720  1800 
 ```
 1681 of these contain some Rcpp package, e.g., Rcpp, RcppEigen
+
+
+Another approach (added later) is 
+```
+usesRcpp =
+function(d)
+{
+   dc = read.dcf(file.path(d, "DESCRIPTION"))
+   v = c("Imports", "Depends", "LinkingTo")
+   m = match(v, colnames(dc), 0)
+   any(grepl("Rcpp", unlist(dc[, m])))
+}
+
+rcpp = sapply(npkgs, usesRcpp)
+table(rcpp)
+ FALSE  TRUE 
+  1776  2158 
+```
+So slightly over 50% of the packages that have native C/C++ code use Rcpp!
+
+
 
 The other packages that are `LinkedTo` are
 ```

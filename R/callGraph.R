@@ -32,6 +32,11 @@ setMethod("getCalledRoutines", "Instruction",
           function(x, ...) {
               character()
           })
+
+setMethod("getCalledRoutines", "MemSetInst",
+          function(x, ...) {
+              character()
+          })
               
 
 library(igraph)
@@ -67,7 +72,7 @@ setMethod("callGraph", "character",
 
 setMethod("callGraph", "Module",
           function(x, adjacency = FALSE, within = TRUE, ...) {
-              funs = getDefinedRoutines(, x, names = FALSE)
+              funs = getDefinedRoutines(x, names = FALSE)
               calls = lapply(funs, function(f) getCalledRoutines(f))
 
               # NAs are for calls via routine pointers.
