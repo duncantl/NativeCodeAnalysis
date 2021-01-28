@@ -3,6 +3,19 @@
 # them.
 # This is a proof-of-concept and has come a reasonable way to be useful.
 
+if(FALSE) {
+    library(Rllvm)
+    library(NativeCodeAnalysis)
+    source("getType.R")
+    m = parseIR("influence.ir")
+    rty = compReturnType(m$influence)
+
+    class(r)
+    names(r)
+    r$length
+    r$elNames
+    sapply(r$els, class)    
+}
 
 compReturnType =
     #
@@ -39,9 +52,11 @@ function(fun, toc = NULL, blocks = getBlocks(fun))
     # collapse the result down.
     # ans = lapply(ans, unlist, recursive = FALSE)# , recursive = FALSE)
     
-    if(length(rets) == 1)
-        ans[[1]]
-    else
+    if(length(rets) == 1) {
+        tmp = ans[[1]]
+         # Drop any null values
+        tmp[sapply(tmp, length) > 0]
+    } else
         ans
 }
 
@@ -112,6 +127,13 @@ setMethod("getCallType", "ANY",
           function(x, var = NULL, ...)
               return(NULL))
 
+
+setMethod("getCallType", "ConstantExpr",
+          function(x, var = NULL, ...) {
+              # XXX probably need to do more.
+              getCallType(x[[1]])
+          })
+
 setMethod("getCallType", "Argument",
           function(x, var = NULL, ...) {
               ans = lapply(getAllUsers(x), getCallType, x, ...)
@@ -143,9 +165,23 @@ setMethod("getCallType", "AllocaInst",
               classes = sapply(u, class)
               # The loads shouldn't change this so ignore those for now. May need to put them back in e.g., for
               # being used in a function call as a pointer. DispatchGroup in do_Math2
-              lapply(u[!(classes %in% c("LoadInst", "BitCastInst"))], getCallType, var, ...)
+              lapply(u[!(classes %in% c("LoadInst", "xxx.BitCastInst"))], getCallType, var = x, ...)
           })
 
+
+
+setMethod("getCallType", "BitCastInst",           
+function(x, var = NULL, ...)
+{
+#              browser()
+    ans = lapply(getAllUsers(x), getCallType, var = x, ...)
+
+    w = sapply(ans, function(x) is(x, "CallInst") && grepl("llvm.lifetime.(start|end)", getName(getCalledFunction(x))))
+    if(all(w))
+        NULL
+    else
+        ans[!w]
+})
 
 setMethod("getCallType", "GlobalVariable",
           function(x, var = NULL, ...) {
@@ -156,9 +192,22 @@ setMethod("getCallType", "GlobalVariable",
           })
 
 
+isPointerToSEXP =
+function(x)
+{
+    ty = getType(x)
+    isPointerType(ty) && sameType(getElementType(ty), SEXPType)
+}
+
 setMethod("getCallType", "CallInst",           
 function(x, var = NULL, ...)
 {
+
+    if(!is.null(var) && any(w <- sapply(x[-length(x)], identical, var)) && isPointerToSEXP(x[[which(w)]])) { # could be passed in two different arguments!
+        # so the return variable is being passed by reference to a routine.
+        return(findTypeByReference(x, var, which(w)))
+    }
+
     kall = x
     id = getName(getCalledFunction(kall))
 #browser()
@@ -503,3 +552,30 @@ function(fn)
                 character())
    ans
 }
+
+
+
+
+findTypeByReference =
+function(call, var, argNum, ...)
+{
+    fun = getCalledFunction(call)
+    funName = getName(fun)
+    m = as(call, "Module")
+    fun = m[[funName]]
+    p = getParameters(fun)
+    rtypeSetTo(p[[argNum]])
+}
+
+rtypeSetTo =
+function(p)
+{
+    u = getAllUsers(p)
+    getCallType(p)
+}
+
+
+setAs("Instruction", "Module",
+      function(from) {
+          as(getParent(from), "Module")
+      })
