@@ -3,6 +3,25 @@
 # them.
 # This is a proof-of-concept and has come a reasonable way to be useful.
 
+
+#
+# Need to 
+#  + get names on vectors - mk2
+#  + class attribute - mk1
+#  + get literal values when available, e.g. for class names, names of vector/list.
+#
+#  connect arguments in a call to another routine and the dimension we get back from that second routine  - connect that to the argument
+#  as it is in terms of the parameter to the second routine, and we need to tie that to the actual parameter in the first/calling routine
+#
+#  listEls2 - Like listEls, not getting types of elements of the list.  Drop the elements. Merge single clss name with elements.
+#  listEls -  returns VECSXP length 2, but doesn't get the types of the elements which is what this is designed to do.
+#
+#  mk1 - basically working, but getting back the two answers with one being  more complete version of the first, i.e. with class.
+#  mk2 -  gets the STRSXP for the class type. Now has the literal names of the class labels.  Returns two different types for the same thing, one complete.
+#
+#
+# √ doS4 - returns the class name of the S4 class that the C code creates.
+
 if(FALSE) {
     library(Rllvm)
     library(NativeCodeAnalysis)
@@ -28,36 +47,46 @@ compReturnType =
     #' @toc data.frame providing a table of contens of defined routines in different files.
     # toc = mkRoutineFileTOC("~/R-4.1/build3/src/main/")
     #
-function(fun, toc = NULL, blocks = getBlocks(fun))
+function(fun, unique = TRUE, toc = NULL, blocks = getBlocks(fun))
 {
     if(length(blocks) == 0) {
+        # The routine has no body so must be defined somewhere else.
+        # We look in the table of contents (toc) to see if we can find it)
         fn = getName(fun)
         if(length(toc)) {
             m = match(getName(fun), toc$routine)
             if(!is.na(m)) {
                 f2 = parseIR(toc$file[m])[[fn]]
-                return(compReturnType(f2, toc = toc))
+                return(compReturnType(f2, toc = toc, unique = unique))
             }
         }
-            
-        warning(fn, " has no BasicBlocks; probably implemented in another module")
+
+        if(!grepl("^llvm\\.lifetime\\.", fn))
+            warning(fn, " has no BasicBlocks; probably implemented in another module")
         return(NULL)
     }
     
     rets = getReturnInstructions(blocks = blocks)
-    ans = lapply(rets, function(x) getCallType(x[[1]]))
 
-    ans = mapply(compListTypes, ans, rets, SIMPLIFY = FALSE, MoreArgs = list(toc = toc))
+    ans0 = lapply(rets, function(x) unique(getCallType(x[[1]])))
+browser()
+    ans = mapply(compListTypes, ans0, rets, SIMPLIFY = FALSE, MoreArgs = list(toc = toc))
 
     # collapse the result down.
     # ans = lapply(ans, unlist, recursive = FALSE)# , recursive = FALSE)
     
-    if(length(rets) == 1) {
+    ans = if(length(rets) == 1) {
         tmp = ans[[1]]
          # Drop any null values
         tmp[sapply(tmp, length) > 0]
     } else
         ans
+
+
+    if(unique)
+       ans = unique(ans)
+
+    ans
 }
 
 
@@ -78,6 +107,7 @@ compListTypes =
     # Determine the types of the elements in an R list
 function(x, ret, ...)
 {
+    
   if(!(inherits(x, "RVector") && x$type == "VECSXP")) {
 
       # Need to process these.
@@ -120,7 +150,11 @@ function(usrs, ret)
 
 setGeneric("getCallType",
            function(x, var = NULL, ...) {
-               standardGeneric("getCallType")
+               tmp = unique( standardGeneric("getCallType") )
+               if(length(tmp) == 1)
+                   tmp[[1]]
+               else
+                   tmp
            })
 
 setMethod("getCallType", "ANY",
@@ -137,15 +171,13 @@ setMethod("getCallType", "ConstantExpr",
 setMethod("getCallType", "Argument",
           function(x, var = NULL, ...) {
               ans = lapply(getAllUsers(x), getCallType, x, ...)
-              ans[!sapply(ans, is.null)]
-
-#              list(type = "SEXP")
+              unlist(ans[!sapply(ans, is.null)], recursive = FALSE)
            })
 
 setMethod("getCallType", "PHINode",
           function(x, var = NULL, ...) {
               #XXX implement -    lapply(x[], getCallType)
-              lapply(seq(length = length(x)), function(i) getCallType(x[[i]]))
+              unlist(lapply(seq(length = length(x)), function(i) getCallType(x[[i]])),  recursive = FALSE)
            })
 
 setMethod("getCallType", "LoadInst",
@@ -165,7 +197,7 @@ setMethod("getCallType", "AllocaInst",
               classes = sapply(u, class)
               # The loads shouldn't change this so ignore those for now. May need to put them back in e.g., for
               # being used in a function call as a pointer. DispatchGroup in do_Math2
-              lapply(u[!(classes %in% c("LoadInst", "xxx.BitCastInst"))], getCallType, var = x, ...)
+              unlist(lapply(u[!(classes %in% c("LoadInst", "xxx.BitCastInst"))], getCallType, var = x, ...), recursive = FALSE)
           })
 
 
@@ -173,14 +205,13 @@ setMethod("getCallType", "AllocaInst",
 setMethod("getCallType", "BitCastInst",           
 function(x, var = NULL, ...)
 {
-#              browser()
     ans = lapply(getAllUsers(x), getCallType, var = x, ...)
 
     w = sapply(ans, function(x) is(x, "CallInst") && grepl("llvm.lifetime.(start|end)", getName(getCalledFunction(x))))
     if(all(w))
         NULL
     else
-        ans[!w]
+        unlist(ans[!w], recursive = FALSE)
 })
 
 setMethod("getCallType", "GlobalVariable",
@@ -208,9 +239,10 @@ function(x, var = NULL, ...)
         return(findTypeByReference(x, var, which(w)))
     }
 
+    
     kall = x
     id = getName(getCalledFunction(kall))
-#browser()
+
     if(id == "Rf_protect")
         return(getCallType(kall[[1]]))
 
@@ -219,10 +251,11 @@ function(x, var = NULL, ...)
     if(id %in% c("Rf_allocVector", "Rf_allocVector3")) {
         ty = kall[[1]]
         len = kall[[2]]
+browser()        
         #??? Change the class to RList if we know the type is VECSXP.
         ans = structure(list(type = mapRType(findValue(ty)), length = findValue(len)), class = "RVector")
     } else if(id == "Rf_allocMatrix") {
-#        browser()
+
         ans = structure(list(type = mapRType(findValue(kall[[1]])),
                              dims = list(nrow = findValue(kall[[2]]),
                                          ncol = findValue(kall[[3]]))),
@@ -288,11 +321,169 @@ function(x, var = NULL, ...)
     } else  if(id %in% c("Rf_length", "Rf_getAttrib")) {
         ans = NULL
     } else {
-        ans = kall
+        
+        # ans = kall
+        ans = compReturnType(getCalledFunction(kall))
     }
+
+
+    # Now find any other code that manipulates the result in a way that gives us more information about
+    # the type of the result, e.g.,  class attribute, names attribute, ...
+    users = getAllUsers(x)
+    ans = lapply(users, findSetAttributes, ans, x)
 
     ans
 })
+
+
+###############
+
+getCharVectorEls =
+    #
+    # Given an instruction that corresponds to a something on which the code calls SET_STRING_ELT
+    # we see if the values of the elements are literal characters that we can now at compile time
+    # and query them.
+    #  m = parseIR("tests/classes.ir")
+    #  z = getBlocks(m$mk2)[[1]][[5]]
+    #  getCharVectorEls(z)
+    #
+    #
+function(x)    
+{
+    u = getAllUsers(x)
+    unlist(lapply(u, function(x)
+                       if(isCallTo(x, "SET_STRING_ELT")) {
+                          getCharEl(x[[3]])  #??? Do we also need the 2nd argument giving the element number in case they are not in order.
+                      } else
+                         character()))
+}
+
+getCharEl =
+    #
+    # Anticipate passing the 3rd argument in a call to SET_STRING_ELT to this routine.
+    #
+    #
+function(x)
+{
+    if(isCallTo(x, "Rf_mkChar"))
+        x = x[[1]]
+
+    if(is(x, "ConstantExpr"))
+        x = x[[1]]
+
+    if(is(x, "GlobalVariable"))
+       getValue(x)
+    else
+       NA
+}
+
+isCallTo =
+    #
+    # Checks if this instruction is a CallInst to any of the routines named in the fun character vector.
+    #
+function(x, fun)
+  is(x, "CallInst") && getName(getCalledFunction(x)) %in% fun
+
+
+##########
+
+# Identify where an object is subsequently manipulated to change its nature,
+# e.g., set a class, names, length, dim, row/column names.
+#
+#  ins is the instruction that uses the return value
+#  irvalue is the return value instruction
+#  to is the R object currently describing the return type as an R object, i.e. from getCallType().
+#
+setGeneric("findSetAttributes", function(ins, to, irvalue, ...) standardGeneric("findSetAttributes"))
+
+setMethod("findSetAttributes", "ANY",
+function(ins, to, irvalue, ...) {
+    to  
+})
+
+setMethod("findSetAttributes", "CallInst",
+function(ins, to, irvalue, ...)
+{
+      id = getName(getCalledFunction(ins))
+
+
+      if(id %in% "Rf_setAttrib" && identical(irvalue, ins[[1]])) {
+
+          at = getAttribName(ins[[2]])
+          val = unique(getAttribValue(ins[[3]]))
+
+            #XXXX fix  smooth the two cases when we have Rf_setAttrib(x, class, ScalarString()) and Rf_setAttrib(x, class, classVector we populate elsewhere)          
+          to = switch(at,
+              "class" = structure(to, RClass = append(val, list(elements = getCharVectorEls(ins[[3]])))), # separate attribute or put the literal values into val ?
+              to)
+      }
+
+      to
+})
+
+
+setGeneric("getAttribName", function(x, ...) standardGeneric("getAttribName"))
+setGeneric("getAttribValue", function(x, ...) standardGeneric("getAttribValue"))
+
+setMethod("getAttribName", "LoadInst",
+function(x, ...)
+    getAttribName(x[[1]]))
+
+setMethod("getAttribName", "GlobalVariable",
+function(x, ...)
+{
+    val = getName(x)
+    if(grepl("^R_.*Symbol$", val))
+        val = tolower(gsub("^R_(.*)Symbol$", "\\1", val))
+
+    val
+})
+
+
+setMethod("getAttribName", "CallInst",
+function(x, ...)
+{
+    # See the call to Rf_install("class") in listEls2
+    fun = getName(getCalledFunction(x))
+
+    if(fun %in% "Rf_install") 
+        return( getAttribName( x[[1]] ) )
+
+    NA
+})
+
+setMethod("getAttribName", "ConstantExpr",
+function(x, ...)
+{
+    getValue(x[[1]])
+})
+
+
+setMethod("getAttribValue", "CallInst",
+function(x, ...)
+{
+    fun = getName(getCalledFunction(x))
+    if(fun %in% c("Rf_allocVector", "Rf_allocVector3")) {
+        getCallType(x)
+    } else if(fun %in% c("Rf_ScalarString", "Rf_mkChar"))
+        getAttribValue(x[[1]])
+    
+})
+
+setMethod("getAttribValue", "ConstantExpr",
+function(x, ...)
+{
+    getAttribValue(x[[1]])
+})
+
+setMethod("getAttribValue", "GlobalVariable",
+function(x, ...)
+{
+    getValue(x)
+})
+
+
+###################
 
 
 setGeneric("findValue",
@@ -375,8 +566,6 @@ setMethod("findValue", "CallInst",
               if(fn != "getListElement") {
                   if(is(val, "CallInst") && getName(val[[length(val)]]) == "INTEGER")
                       return(findValue(val[[1]]))
-
-#                  browser()
               }
               
               NULL
@@ -575,6 +764,7 @@ function(p)
 }
 
 
+# Remove as now in Rllvm.
 setAs("Instruction", "Module",
       function(from) {
           as(getParent(from), "Module")
