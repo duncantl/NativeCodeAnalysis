@@ -17,7 +17,7 @@
 #  listEls -  returns VECSXP length 2, but doesn't get the types of the elements which is what this is designed to do.
 #
 #  mk1 - basically working, but getting back the two answers with one being  more complete version of the first, i.e. with class.
-#  mk2 -  gets the STRSXP for the class type. Now has the literal names of the class labels.  Returns two different types for the same thing, one complete.
+#  √ mk2 -  gets the STRSXP for the class type. Now has the literal names of the class labels.  Returns two different types for the same thing, one complete.
 #
 #
 # √ doS4 - returns the class name of the S4 class that the C code creates.
@@ -69,7 +69,7 @@ function(fun, unique = TRUE, toc = NULL, blocks = getBlocks(fun))
     rets = getReturnInstructions(blocks = blocks)
 
     ans0 = lapply(rets, function(x) unique(getCallType(x[[1]])))
-browser()
+
     ans = mapply(compListTypes, ans0, rets, SIMPLIFY = FALSE, MoreArgs = list(toc = toc))
 
     # collapse the result down.
@@ -233,7 +233,6 @@ function(x)
 setMethod("getCallType", "CallInst",           
 function(x, var = NULL, ...)
 {
-
     if(!is.null(var) && any(w <- sapply(x[-length(x)], identical, var)) && isPointerToSEXP(x[[which(w)]])) { # could be passed in two different arguments!
         # so the return variable is being passed by reference to a routine.
         return(findTypeByReference(x, var, which(w)))
@@ -251,7 +250,7 @@ function(x, var = NULL, ...)
     if(id %in% c("Rf_allocVector", "Rf_allocVector3")) {
         ty = kall[[1]]
         len = kall[[2]]
-browser()        
+#browser()        
         #??? Change the class to RList if we know the type is VECSXP.
         ans = structure(list(type = mapRType(findValue(ty)), length = findValue(len)), class = "RVector")
     } else if(id == "Rf_allocMatrix") {
@@ -311,7 +310,7 @@ browser()
     }  else if(id == "STRING_ELT") {
         ans = "STRSXP"
     } else if(id == "SET_VECTOR_ELT") {
-        browser()
+#        browser()
         if(!is.null(var)) {
             w = sapply(kall[], identical, var)
             if(any(w) && which(w) == 3)
@@ -329,8 +328,14 @@ browser()
 
     # Now find any other code that manipulates the result in a way that gives us more information about
     # the type of the result, e.g.,  class attribute, names attribute, ...
+    # Is this just the calls to Rf_setAttrib ?
+    # When processig, for example, mk2 we have calls to Rf_protect() and return()
+    # but these just create duplicate - almost, i.e. some with less information about the class.
+    # XXX Find out what other instructions and calls to routines we need to capture the details
+    # describing the R object.
     users = getAllUsers(x)
-    ans = lapply(users, findSetAttributes, ans, x)
+    w = sapply(users, isCallTo, "Rf_setAttrib")
+    ans = lapply(users[w], findSetAttributes, ans, x)
 
     ans
 })
