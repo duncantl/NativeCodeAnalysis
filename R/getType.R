@@ -3,7 +3,6 @@
 # them.
 # This is a proof-of-concept and has come a reasonable way to be useful.
 
-
 #
 # Need to 
 #  + get names on vectors - mk2
@@ -13,14 +12,14 @@
 #  connect arguments in a call to another routine and the dimension we get back from that second routine  - connect that to the argument
 #  as it is in terms of the parameter to the second routine, and we need to tie that to the actual parameter in the first/calling routine
 #
-#  listEls2 - Like listEls, not getting types of elements of the list.  Drop the elements. Merge single clss name with elements.
-#  listEls -  returns VECSXP length 2, but doesn't get the types of the elements which is what this is designed to do.
+# √ listEls2 -
+# √ listEls -  returns VECSXP length 2 with the RClassLabels
 #
-#  mk1 - basically working, but getting back the two answers with one being  more complete version of the first, i.e. with class.
-#  √ mk2 -  gets the STRSXP for the class type. Now has the literal names of the class labels.  Returns two different types for the same thing, one complete.
+# √ mk1 - basically working. merge the class with the elements field.
 #
+# √ mk2 -  gets the STRSXP for the class type. Now has the literal names of the class labels.  Returns two different types for the same thing, one complete.
 #
-# √ doS4 - returns the class name of the S4 class that the C code creates.
+# √ doS4 - returns the class name of the S4 class that the C code creates. Class is S4Instance.
 
 if(FALSE) {
     library(Rllvm)
@@ -68,7 +67,7 @@ function(fun, unique = TRUE, toc = NULL, blocks = getBlocks(fun))
     
     rets = getReturnInstructions(blocks = blocks)
 
-    ans0 = lapply(rets, function(x) unique(getCallType(x[[1]])))
+    ans0 = lapply(rets, function(x) (getCallType(x[[1]])))   # had unique()
 
     ans = mapply(compListTypes, ans0, rets, SIMPLIFY = FALSE, MoreArgs = list(toc = toc))
 
@@ -78,12 +77,12 @@ function(fun, unique = TRUE, toc = NULL, blocks = getBlocks(fun))
     ans = if(length(rets) == 1) {
         tmp = ans[[1]]
          # Drop any null values
-        tmp[sapply(tmp, length) > 0]
+        # tmp[sapply(tmp, length) > 0]
     } else
         ans
 
 
-    if(unique)
+    if(FALSE && unique)
        ans = unique(ans)
 
     ans
@@ -133,8 +132,9 @@ function(x, ret, ...)
 getListNames =
 function(usrs, ret)
 {
+
     w = sapply(usrs, function(x) is(x, "CallInst") && getName(getCalledFunction(x)) == "Rf_setAttrib" &&
-                                       getName(x[[2]][[1]]) == "R_NamesSymbol")  # have to be more robust here.
+                                        getAttribName(x[[2]]) == "names") # "R_NamesSymbol") 
     if(!any(w))
         return(character())
     
@@ -150,7 +150,7 @@ function(usrs, ret)
 
 setGeneric("getCallType",
            function(x, var = NULL, ...) {
-               tmp = unique( standardGeneric("getCallType") )
+               tmp = ( standardGeneric("getCallType") )  # had call to unique()
                if(length(tmp) == 1)
                    tmp[[1]]
                else
@@ -320,7 +320,6 @@ function(x, var = NULL, ...)
     } else  if(id %in% c("Rf_length", "Rf_getAttrib")) {
         ans = NULL
     } else {
-        
         # ans = kall
         ans = compReturnType(getCalledFunction(kall))
     }
@@ -329,13 +328,17 @@ function(x, var = NULL, ...)
     # Now find any other code that manipulates the result in a way that gives us more information about
     # the type of the result, e.g.,  class attribute, names attribute, ...
     # Is this just the calls to Rf_setAttrib ?
-    # When processig, for example, mk2 we have calls to Rf_protect() and return()
+    # When processing, for example, mk2 we have calls to Rf_protect() and return()
     # but these just create duplicate - almost, i.e. some with less information about the class.
     # XXX Find out what other instructions and calls to routines we need to capture the details
     # describing the R object.
+
     users = getAllUsers(x)
     w = sapply(users, isCallTo, "Rf_setAttrib")
-    ans = lapply(users[w], findSetAttributes, ans, x)
+
+    if(any(w))
+        for(u in users[w])
+            ans = findSetAttributes(u, ans, x)
 
     ans
 })
@@ -415,12 +418,28 @@ function(ins, to, irvalue, ...)
       if(id %in% "Rf_setAttrib" && identical(irvalue, ins[[1]])) {
 
           at = getAttribName(ins[[2]])
-          val = unique(getAttribValue(ins[[3]]))
+          val = (getAttribValue(ins[[3]])) # unique()
 
-            #XXXX fix  smooth the two cases when we have Rf_setAttrib(x, class, ScalarString()) and Rf_setAttrib(x, class, classVector we populate elsewhere)          
-          to = switch(at,
-              "class" = structure(to, RClass = append(val, list(elements = getCharVectorEls(ins[[3]])))), # separate attribute or put the literal values into val ?
-              to)
+          to = if(at == "class") {
+                    # separate attribute or put the literal values into val ?
+
+              #XXXX fix  smooth the two cases when we have Rf_setAttrib(x, class, ScalarString()) and Rf_setAttrib(x, class, classVector we populate elsewhere)
+              
+              # For mk2 in classes.c val 
+              # val is a list with the RVector describinng a STRSXP with 2 elements.
+              # We could just return the names of the classes if we have literal values
+              # But if these are not known at compile time, we may want to return
+              # a structure describing what we do know.
+                  if((is.list(val) && is(val[[1]], "RVector")) || is(val, "RVector") )
+                     val = getCharVectorEls(ins[[3]])
+              #              else if(is.character(val))
+              # Do we want to structure the simple name e.g. foo from Rf_setAttrib(ans, class, "foo")
+              # into a RVector of type STRSXP with length 1 and elements = "foo"
+                  attr(to, "RClassLabels") = val
+                  to
+           } else
+                  to
+
       }
 
       to
