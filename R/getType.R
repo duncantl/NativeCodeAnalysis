@@ -1,16 +1,34 @@
 # This needs some cleaning up but is a reasonable start.
-# The classes are up for tweaking to make more useful in how we use
-# them.
+# The classes are up for tweaking to make more useful in how we use them.
 # This is a proof-of-concept and has come a reasonable way to be useful.
 
+# see tests/classes.c   tests/byRef.c  tests/Rexample.c
+# For tests/classes.c
+# Need to
+#   + listEls3 doesn't give back much information - just VECSXP 2, no class, el-types and no names on the elements.
+#     I think we are just analyzing listEls1 and not taking advantage of the fact that we know what we are passing into it.
+#     This is a case where listEls1() is returning what we pass into it and just annotating it.
+#     Different from the case where the output is based on the *value* in the inputs, but unrelated to their structure.
+# 
+#   + √ mkUnknown.  Have it return that there is a class being set and make it NA, or have it be the call to mkClassName - parameter is x.
+#       currently create a list with the instruction and the parameters that it uses and put a SymbolicComputation class on it.
+#  
 #
-# Need to 
+#
 #  + get names on vectors - mk2
 #  + class attribute - mk1
 #  + get literal values when available, e.g. for class names, names of vector/list.
 #
+#  Works for -O1 and -O2 level compiled code, but giving back less information on -O0. For listEls2, just VECSXP 2, no class, etc.
+#  and for -O0, compReturnType(m$mk2) (and mk1) doesn't get the name of the parameter for the length and has for the class attribute
+# [1] "NULL"           "SymbolicLength"
+#
+#
+
 #  connect arguments in a call to another routine and the dimension we get back from that second routine  - connect that to the argument
 #  as it is in terms of the parameter to the second routine, and we need to tie that to the actual parameter in the first/calling routine
+#
+#  tests/classes.c
 #
 # √ listEls2 -
 # √ listEls -  returns VECSXP length 2 with the RClassLabels
@@ -67,7 +85,7 @@ function(fun, unique = TRUE, toc = NULL, blocks = getBlocks(fun))
     
     rets = getReturnInstructions(blocks = blocks)
 
-    ans0 = lapply(rets, function(x) (getCallType(x[[1]])))   # had unique()
+    ans0 = lapply(rets, getCallType)
 
     ans = mapply(compListTypes, ans0, rets, SIMPLIFY = FALSE, MoreArgs = list(toc = toc))
 
@@ -134,12 +152,12 @@ function(usrs, ret)
 {
 
     w = sapply(usrs, function(x) is(x, "CallInst") && getName(getCalledFunction(x)) == "Rf_setAttrib" &&
-                                        getAttribName(x[[2]]) == "names") # "R_NamesSymbol") 
+                                        getAttribName(x[[2]]) == "names") 
     if(!any(w))
         return(character())
     
     tmp = sapply(usrs[w], function(x) x[[3]]) # get the 3rd arg for Rf_setAttrib()
-    nu = lapply(tmp, getAllUsers) # get the second arg of Rf_allocVector()
+    nu = lapply(tmp, getAllUsers) # get the second arg of Rf_allocVector() (??)
 
     lapply(nu, function(nu) {
                     w = sapply(nu, function(x) is(x, "CallInst") && getName(getCalledFunction(x)) == "SET_STRING_ELT")
@@ -161,6 +179,23 @@ setMethod("getCallType", "ANY",
           function(x, var = NULL, ...)
               return(NULL))
 
+setMethod("getCallType", "ReturnInst",
+          function(x, var = NULL, ...)
+          {
+              val = x[[1]]
+              # If the return value is a call to a function that calls a function
+              # that returns one of its SEXP parameters, then we want to get the type
+              # of that
+              # e.g. if we have return(f(g(x))) and f returns its only parameter having updated it
+              #  we want to get the return type of g() and then update that
+              # Similalrly, if we have f(g(h(x))) and g updates its parameter then we need the return type of
+              # h and update it with the info. from g and then update that with the input from f
+              browser()
+              if(is(val, "CallInst") && returnsArg(getCalledFunction(val))) {
+                  browser()
+              } else
+                  getCallType(val)
+})
 
 setMethod("getCallType", "ConstantExpr",
           function(x, var = NULL, ...) {
@@ -418,7 +453,7 @@ function(ins, to, irvalue, ...)
       if(id %in% "Rf_setAttrib" && identical(irvalue, ins[[1]])) {
 
           at = getAttribName(ins[[2]])
-          val = (getAttribValue(ins[[3]])) # unique()
+          val = getAttribValue(ins[[3]])
 
           to = if(at == "class") {
                     # separate attribute or put the literal values into val ?
@@ -491,7 +526,12 @@ function(x, ...)
         getCallType(x)
     } else if(fun %in% c("Rf_ScalarString", "Rf_mkChar"))
         getAttribValue(x[[1]])
-    
+    else if(any(x[-length(x)] %in% (params <- getParameters(as(x, "Function"))))) {
+        i = match(x[-length(x)], params)
+        structure(list(instruction = x), class = "SymbolicComputation", usesParameters = structure(i, names = names(params[i])))
+    } else
+        NA
+
 })
 
 setMethod("getAttribValue", "ConstantExpr",
@@ -793,3 +833,36 @@ setAs("Instruction", "Module",
       function(from) {
           as(getParent(from), "Module")
       })
+
+
+
+
+returnsArg =
+    #
+    # Note that the IR has returned as an attribute on the parameter.
+    #
+    #
+function(f, params = getParameters(f))
+{
+    ret = getReturnInstructions(f)
+    if(length(ret) == 0)
+        return(FALSE)
+
+    w = sapply(params, identical, ret[[1]])
+    if(any(w))
+        which(w)
+    else
+        FALSE
+}
+
+
+returnsArg =
+    # 2nd version that uses hasReturned attribute on the paramters
+function(f, params = getParameters(f))
+{
+    w = sapply(params, hasReturned)
+    if(!any(w))
+        FALSE
+    else
+        which(w)
+}
