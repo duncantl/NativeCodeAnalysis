@@ -1,5 +1,7 @@
 # Native Code in CRAN Packages
 
+!!  See the parallel directory CRAN.
+
 We have a mirror of CRAN. It is a little out of date at this time (Feb 10)
 having been updated in Dec. 2019. However, the approach and the general
 data are still representative.
