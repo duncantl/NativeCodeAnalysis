@@ -46,7 +46,7 @@ mapNativeCallNodes =
 function(nodes, file, withFunName = FALSE)
 {
     routines = sapply(nodes, getRoutine)
-    ans = data.frame(callType = sapply(nodes, getCallType),
+    ans = data.frame(callType = sapply(nodes, rgetCallType),
                      routine = unlist(routines),
                      routineType = names(routines),
                      package = sapply(nodes, getPackage),
@@ -109,7 +109,7 @@ function(node)
 }
 
 
-getCallType =
+rgetCallType =
 function(call)    
 {
    call$fn$value
