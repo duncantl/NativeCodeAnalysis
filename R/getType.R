@@ -116,7 +116,7 @@ function(fun, blocks = getBlocks(fun))
     terms = lapply(blocks, getTerminator, FALSE)
     isRet = sapply(terms, is, 'ReturnInst')
 
-    rets = terms[isRet]
+    terms[isRet]
         # Can we ever have multiple returns???
 }
 
@@ -190,7 +190,7 @@ setMethod("getCallType", "ReturnInst",
               #  we want to get the return type of g() and then update that
               # Similalrly, if we have f(g(h(x))) and g updates its parameter then we need the return type of
               # h and update it with the info. from g and then update that with the input from f
-              browser()
+
               if(is(val, "CallInst") && returnsArg(getCalledFunction(val))) {
                   browser()
               } else
@@ -237,7 +237,7 @@ setMethod("getCallType", "AllocaInst",
 
 
 
-setMethod("getCallType", "BitCastInst",           
+setMethod("getCallType", "CastInst", # was "BitCastInst",    expanded to CastInst to get SExtInst
 function(x, var = NULL, ...)
 {
     ans = lapply(getAllUsers(x), getCallType, var = x, ...)
@@ -324,12 +324,13 @@ function(x, var = NULL, ...)
         ans = structure(c(tmp, tag = findValue(kall[[2]][[1]])), class = "RExternalPtr")
 #browser()
     } else if(id == "R_do_new_object") {
+#browser()        
         nm = kall[[1]]
         if(is(nm, "CallInst") && getName(getCalledFunction(nm)) == "R_do_MAKE_CLASS") 
             nm = nm[[1]]   # Now have a ConstantExpr for eg. rklass.  But need the string.
 
         val = findValue(nm)
-        ans = structure(list(className = val),  class = "S4Instance")
+        ans = structure(list(className = val), class = "S4Instance")
     }  else if(id == "Rf_coerceVector") {
 #        browser()
         ans = NULL # Fix.
@@ -458,6 +459,7 @@ function(ins, to, irvalue, ...)
           to = if(at == "class") {
                     # separate attribute or put the literal values into val ?
 
+              
               #XXXX fix  smooth the two cases when we have Rf_setAttrib(x, class, ScalarString()) and Rf_setAttrib(x, class, classVector we populate elsewhere)
               
               # For mk2 in classes.c val 
@@ -561,8 +563,7 @@ setGeneric("findValue",
 
 setMethod("findValue", "ANY",
           function(val, rtype = FALSE, ...) {
-              #cat("findValue default", class(val), "\n")
-#              browser()
+              message("findValue default", class(val), "\n")
           })
 
 tmp = function(val, rtype = FALSE, ...)  findValue(val[[1]])
@@ -573,6 +574,19 @@ setMethod("findValue", "GetElementPtrInst", tmp)
 #setMethod("findValue", "OverflowingBinaryOperator", tmp)
 
 
+setMethod("findValue", "AllocaInst",
+          function(val, rtype = FALSE, ...)  {
+              u = getAllUsers(val)
+              w = sapply(u, is, "StoreInst")
+              if(any(w)) {
+                  ans = lapply(u[w], function(x) findValue(x[[1]], rtype, ...))
+                  if(sum(w) > 1) warning("@DTL: check this case")
+                  ans[[1]]
+              } else
+                  NULL
+          })
+
+
 setMethod("findValue", "ConstantInt",
           function(val, rtype = FALSE, ...) 
                getValue(val)
@@ -580,7 +594,7 @@ setMethod("findValue", "ConstantInt",
 
 setMethod("findValue", "SelectInst",
            function(val, rtype = FALSE, ...) 
-               sapply(val[2:3], findValue)
+               sapply(val[2:3], findValue, rtype, ...)
           )
 
 setMethod("findValue", "LoadInst",
@@ -626,6 +640,9 @@ setMethod("findValue", "CallInst",
 
               if(fn == "Rf_mkChar")
                   return(findValue(val[[1]]))
+
+              if(fn == "R_do_MAKE_CLASS")
+                  return(findValue(val[[1]]))              
 
               if(fn != "getListElement") {
                   if(is(val, "CallInst") && getName(val[[length(val)]]) == "INTEGER")
