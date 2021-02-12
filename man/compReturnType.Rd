@@ -2,14 +2,21 @@
 \alias{compReturnType}
 \title{Compute the type of the R return type from a routine}
 \description{
-  This function examines an native/IR Function that returns an R
+  This function examines an native/IR (LLVM intermediate representation) Function that returns an R
   object (\code{SEXP}).
   It examines the native code to find the possible R types that
   are returned and returns a description for each of these possible types.
   These types are currently described as scalars, vectors, lists,
   matrices, NULL,
   and where possible, the length/dimensions of the vectors/matrices
-  and also how these were computed from parameters to the function(s).
+  and also from which parameters these were computed.
+
+  Note that while the approach is reasonably general, the current
+  implementation works with IR code that has been generated
+  with an optimization level of 1 or higher, not \code{-O0}.
+  With \code{-O0}, we currently recover some of the information but not
+  necessarily the class and element names.  This can be fixed, but just
+  requires some additional steps to be added to the existing code.
 }
 \usage{
 compReturnType(fun, toc = NULL, blocks = getBlocks(fun))
@@ -24,6 +31,11 @@ compReturnType(fun, toc = NULL, blocks = getBlocks(fun))
   A list with elements for each of the different return paths.
   The elements describe the R types. These can be scalars,
   vectors, matrices, NULL, ....
+
+  S4 objects are represented by \code{S4Instance}.
+
+  We will change the nature of the R representations of the  type
+  descriptions  in the future. For now, this is more proof-of-concept.
 }
 \author{
 DTL
