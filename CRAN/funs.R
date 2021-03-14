@@ -39,3 +39,24 @@ function(pkg, ns = readLines(file.path(pkg, "NAMESPACE"), warn = FALSE))
 }
 
 
+
+
+
+dotCallReturnTypes =
+function(pkg)
+{
+    f = file.path(pkg, "all.bc")
+
+    if(!file.exists(f)) {
+        warning("no file ", f)
+        return(NULL)
+    }
+
+    cat("Package", basename(dirname(pkg)), "\n")
+    
+    m = readBitcode(f)
+    funs = getDefinedRoutines(m, names = FALSE)
+    funs = funs[sapply(funs, isDotCall)]
+
+    lapply(funs, function(f) {cat("routine:", getName(f), "\n"); try(compReturnType(f)) })
+}

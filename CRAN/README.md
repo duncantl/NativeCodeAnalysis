@@ -85,6 +85,8 @@ FALSE  TRUE
  1776  2158
 ```
 So 55% do and 45% don't.
+% Check again.  New run gives 1844 versus 1962
+% 3901 elements in src/ and 95 have no C/C++ files.
 
 
 We won't consider all package dependencies, but we will look at one-step dependencies we can
@@ -144,3 +146,51 @@ cmds = sprintf("(cd %s/src; R CMD make -f IRMakefile all.bc CC=clang CXX=clang++
 e2 = lapply(cmds, function(x) try(system(x, intern = TRUE)))
 ```
 This brings us to 103 packages that don't have an `all.bc` file, so an additonal 10 packages were succesful.
+
+
+
+
+
+
+
+To look at the distribution of the types of instructions
+```
+ins = lapply(bcFiles, function(f) sapply(unlist(getInstructions(readBitcode(f))), class))
+table(unlist(ins))
+```
+
+
+
+
+
+
+
+#
++ tripack has one .c file (init.c) and the rest are .f files.
+
+
++ log4r - only one routine.  
+```
+m = parseIR("~/CRAN2/Pkgs/log4r/src/log4r.ir")
+compReturnType(m$R_fmt_current_time)
+```
+  Note that this calls Rf_error() and then returns R_NilValue. The IR code knows Rf_error() never
+  returns and so the R_NilValue is never a possible return value.
+
+
+
++ gte/ has only .C 
+```
+m = readBitcode("~/CRAN2/Pkgs/gte/src/all.bc")
+funs = getDefinedRoutines(m, names = FALSE)
+lapply(funs, function(f) { p = getParameters(f); p[sapply(p, onlyReadsMemory)]})
+```
+
++ MSCMT
+m = readBitcode("~/CRAN2/Pkgs/MSCMT/src/all.bc")
+funs = getDefinedRoutines(m, names = FALSE)
+funs = funs[sapply(funs, isDotCall)]
+ty = compReturnType(m$DE)
+
+types = lapply(funs, compReturnType)
+
