@@ -15,3 +15,4 @@ Maintainer: Duncan Temple Lang <duncan@r-project.org>
 Imports: Rllvm, RCIndex
 License: BSD+LICENSE
 LazyData: true
+Suggests: igraph

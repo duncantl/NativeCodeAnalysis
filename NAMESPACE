@@ -32,3 +32,8 @@ export(getSubclasses)
 
 
 
+
+export(findDotCallRoutines, isDotCall)
+
+
+export(getCalledFunctions, getCallsTo)
