@@ -6,21 +6,21 @@ setGeneric("getCalledFunctions",
 
 setMethod("getCalledFunctions",
           "character",
-          function(x,  external = TRUE, ...)
+          function(x,  external = FALSE, ...)
           {
               getCalledFunctions(parseIR(x), external, ...)
           })
 
 setMethod("getCalledFunctions",
           "Module",
-          function(x,  external = TRUE, ...)
+          function(x,  external = FALSE, ...)
 {
     defs = getDefinedRoutines(getName(x), module = x, names = FALSE)
     lapply(defs, getCalledFunctions, external = external, module = x, defs = names(defs) )
 })
 
 setMethod("getCalledFunctions", "Function",
-           function(x, external = TRUE, defs = character(), ...)
+           function(x, external = FALSE, defs = character(), ...)
 {
     ins = getInstructions(x)
     w = sapply(ins, is, "CallBase")

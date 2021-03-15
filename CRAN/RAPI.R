@@ -21,6 +21,7 @@ library(Rllvm)
 bcs = system("find ~/CRAN2 -name all.bc", intern = TRUE)
 names(bcs) = basename(dirname(dirname(bcs)))
 
+# 17 minutes.
 cf = lapply(bcs, getCalledFunctions)
 
 Rmain = parseIR("~/R-devel/build/src/main/all.bc")
@@ -34,7 +35,7 @@ cf3 = lapply(cf2, function(x) x[ sapply(x, length) > 0 ])
 
 tt = sort(table(unlist(cf3)), decreasing = TRUE)
 
-#saveRDS(cf3, "cf3.rds")
+saveRDS(cf3, "RRoutinesCalledFromPkgs.rds")
 
 #
 # 238 routines used in 1645 packages. These packages are the ones not using Rcpp.
