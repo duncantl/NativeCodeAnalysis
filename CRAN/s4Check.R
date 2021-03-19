@@ -8,6 +8,15 @@ dyn.load("typeof.so")
 setClass("r", list(unit = "character"), contains = "numeric")
 obj = new("r", pi, unit = "?")
 .Call("R_typeof", obj)
+# REALSXP
 
 setClass("bob", list(a = "integer", b = "character"))
 b = new("bob")
+.Call("R_typeof", b)
+# 25 - S4SXP
+
+setClass("jane", contains = c("bob", "numeric"))
+j  = new("jane")
+.Call("R_typeof", j)
+# 14  - REALSXP
+
