@@ -24,7 +24,11 @@ names(bcs) = basename(dirname(dirname(bcs)))
 # 17 minutes.
 cf = lapply(bcs, getCalledFunctions)
 
-Rmain = parseIR("~/R-devel/build/src/main/all.bc")
+# Use Rmain.bc rather than all.bc as the former now includes memory.bc and inspect.bc
+# (but not xxxpr.bc).  We excluded these two from all.bc as they cause the SEXP struct
+# to be actually included in the .bc file rather than having it as an opaque struct.
+
+Rmain = parseIR("~/R-devel/build/src/main/Rmain.bc")
 rfuns = getDefinedRoutines(Rmain, names = FALSE)
 
 
