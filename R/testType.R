@@ -26,7 +26,7 @@ function(fun, params = getParameters(fun))
 testParamType =
 function(p, uses = getAllUsers(p))
 {
-browser()
+
     w = sapply(uses, function(x) is(x, "CallBase") && is(cf <- getCalledFunction(x), "Function") && ( grepl("^Rf_is", getName(cf)) || getName(cf) %in% c("TYPEOF")))
 
     if(!any(w))
@@ -35,7 +35,6 @@ browser()
     w2 = sapply(uses[w], isUsedInErrorTest)
 
     if(any(w2)) {
-
         tmp = uses[w][w2]
         return(sapply(tmp, function(x) getName(getCalledFunction(x))))
     }
@@ -66,9 +65,9 @@ function(cmp)
     u = u[[1]]
     if(!is(u, "BranchInst"))
         return(FALSE)
-
+browser()
     block = u[[3]]
-    hasCallToError(block)
+    hasCallToError(block) || leadsToErrorBlock(block)
 }
 
 hasCallToError =
@@ -77,3 +76,14 @@ function(b, ins = getInstructions(b))
    any(sapply(ins, function(i) is(i, "CallBase") && is(cf <- getCalledFunction(i), "Function") && grepl("^Rf_error", getName(cf))))
 }
 
+
+leadsToErrorBlock =
+function(b, seen = list())
+{
+    if(any(sapply(seen, identical, b)))
+        return(FALSE)
+    
+    trm = getTerminator(b)
+    browser()
+    any(sapply(trm[-1], hasCallToError))
+}
