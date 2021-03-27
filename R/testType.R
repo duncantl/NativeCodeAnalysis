@@ -80,15 +80,23 @@ branchesToError =
 function(cmp, index = 3L)
 {
     u = getAllUsers(cmp)
-    if(length(u) > 1)
-        warning("more than one use of the comparison predicate")
+    if(length(u) > 1) {
+        # Not certain how robust this is but analyzes all the users, not just the first.
+        return(any(sapply(u, function(i)  if(is(i, "BranchInst")) leadsToError(i[[index]]) else branchesToError(i))))
+       #  warning("more than one use of the comparison predicate")
+    }
+    
     u = u[[1]]
     if(!is(u, "BranchInst"))
         return(FALSE)
 
     block = u[[ index ]]
-    hasCallToError(block) || leadsToErrorBlock(block)
+    leadsToError(block)
 }
+
+leadsToError =
+function(block)               
+    hasCallToError(block) || leadsToErrorBlock(block)
 
 hasCallToError =
 function(b, ins = getInstructions(b))
