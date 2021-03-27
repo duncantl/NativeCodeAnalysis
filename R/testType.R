@@ -17,6 +17,10 @@
 #
 
 testType =
+    #
+    # given a function, determine if there are any tests on the parameters that identify the expected type(s)
+    # using is* routines and TYPEOF().
+    #
 function(fun, params = getParameters(fun))
 {
    sapply(params, testParamType)
@@ -24,19 +28,25 @@ function(fun, params = getParameters(fun))
 
 
 testParamType =
+    # p is a Argument, i.e. a parameter of an LLVM Function
 function(p, uses = getAllUsers(p))
 {
-
     w = sapply(uses, function(x) is(x, "CallBase") && is(cf <- getCalledFunction(x), "Function") && ( grepl("^Rf_is", getName(cf)) || getName(cf) %in% c("TYPEOF")))
 
     if(!any(w))
         return(NULL)
 
     w2 = sapply(uses[w], isUsedInErrorTest)
+    w2 = sapply(w2, any)
 
     if(any(w2)) {
         tmp = uses[w][w2]
-        return(sapply(tmp, function(x) getName(getCalledFunction(x))))
+        fnNames = lapply(tmp, function(x) getName(getCalledFunction(x)))
+        w = fnNames == "TYPEOF"
+        if(any(w))
+            fnNames[w] = sapply(tmp[w], getTYPEOFComparison)
+
+        return(fnNames)
     }
 
     return(NULL)        
@@ -46,18 +56,28 @@ function(p, uses = getAllUsers(p))
 isUsedInErrorTest =
 function(call)
 {
+    isTypeof = getName(getCalledFunction(call)) == "TYPEOF"
+    
     uses = getAllUsers(call)
 
-    is.comp = sapply(uses, function(x) is(x, "CmpInst") && any(sapply(x[], function(v) is(v, "ConstantInt") && getValue(v) == 0L)))
+    if(isTypeof) {
+        is.comp = sapply(uses, function(x) is(x, "CmpInst") && any(sapply(x[], function(v) is(v, "ConstantInt"))))
+    } else
+        is.comp = sapply(uses, function(x) is(x, "CmpInst") && any(sapply(x[], function(v) is(v, "ConstantInt") && getValue(v) == 0L)))
+    
     if(!any(is.comp))
         return(FALSE)
 
-    
-    sapply(uses[is.comp], branchesToError)
+
+    sapply(uses[is.comp], branchesToError, if(isTypeof) 2L else 3L)
 }
 
+# for routine ALIKEC_compare_attributes_internal_simple in package vetr, we get multiple users
+#  an or command (BinaryOperator) and a SelectInst.
+#  So two and neither is a BranchInst.
+
 branchesToError =
-function(cmp)
+function(cmp, index = 3L)
 {
     u = getAllUsers(cmp)
     if(length(u) > 1)
@@ -65,8 +85,8 @@ function(cmp)
     u = u[[1]]
     if(!is(u, "BranchInst"))
         return(FALSE)
-browser()
-    block = u[[3]]
+
+    block = u[[ index ]]
     hasCallToError(block) || leadsToErrorBlock(block)
 }
 
@@ -84,6 +104,24 @@ function(b, seen = list())
         return(FALSE)
     
     trm = getTerminator(b)
-    browser()
-    any(sapply(trm[-1], hasCallToError))
+
+    if(is(trm, "InvokeInst")) {
+        # any(sapply(trm[3:4], hasCallToError))
+        any(sapply(trm[][ sapply(trm[], is, "BasicBlock") ], hasCallToError))
+   } else if(is(trm, "SwitchInst")) {
+       any(sapply(trm[] [ sapply(trm[], is, "BasicBlock")] , hasCallToError))
+   } else
+       any(sapply(trm[-1], hasCallToError))
+}
+
+
+
+getTYPEOFComparison =
+function(call)
+{
+    uses = getAllUsers(call)
+    is.comp = sapply(uses, function(x) is(x, "CmpInst") && any(sapply(x[], function(v) is(v, "ConstantInt"))))
+    sapply(uses[is.comp], function(cmp) { w = sapply(cmp[], is, "ConstantInt")
+                                          NativeCodeAnalysis:::getRType(getValue(cmp[][w][[1]]))
+                                      })
 }
