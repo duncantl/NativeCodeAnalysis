@@ -1,0 +1,104 @@
+<section
+	 xmlns:c="http://www.C.org"
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:omg="http://www.omegahat.org">
+<title></title>
+
+<para>
+  The function <r:func>compReturnType</r:func> in <file>getType.R</file>
+  computes
+  R-specific information about the return type from a routine
+  we invoke via <r:func>.Call</r:func>.
+  (The same logic will apply to <r:func>.External</r:func> calls.)
+  The <r:func>inferParamTypess</r:func> and <r:func>inferParamType</r:func>
+  do the equivalent for the parameters/inputs to a <r:func>.Call</r:func> routine.
+  They attempt to determine the more specific type of <r/> object for each parameter.
+</para>
+<para>
+  The role of the <r:func>compReturnType</r:func> function is to examine routines that
+  return an <r/> object.
+  These return  a generic <c:type>SEXP</c:type>.
+  However, each routine is typically more specific and constrained about what
+  types of <r/> objects it returns.
+  We want to find this more specific information so we can use it
+  to determine the types of <r/> objects generally.
+  We can often determine the specific type of <r/> object
+  or the set of possible types of <r/> object.
+  For example, some math-related routines will return either a numeric vector or a complex vector but
+  no other type of <r/> object.
+</para>
+
+<para>
+  If the routine  returns a list (rather than an homogeneous vector),
+  we want to know a) the types of each element,
+  b) the names of the elements. (<file>classes.c</file> and listEls2)
+</para>
+<para>
+  We also want to extract the names of the elements of a regular vector. (<file>namedReturnVecs.c</file>)
+</para>
+
+<para>
+  We also want to determine the class of the <r/> object being returned.
+</para>
+<para>
+  We also want the dimensions of the <r/> result.
+  This can be a simple specific constant value.
+  Alternatively, and more common, this is a function of the characteristics of the
+  parameters/arguments of the routine, e.g., the
+  length of the result is the length of an argument, or the number of rows or columns of one or more arguments.
+</para>
+
+
+<para>
+  In routines where the return value is passed by reference to a second routine,
+  we have to analyze that second routine and see how it modifies this parameter.
+  (<file>tests/byRef.c</file>)
+
+</para>
+
+<para>
+  Some routines will construct an <r/> object and then pass it to another to be updated/annotated, e.g. set the class or
+  names.
+  Ideally, we get the combination of the original structure and the updates. (listEls3 in <file>class.c</file>)
+</para>
+
+
+
+<para>
+  While there are several applications that use the <r/> types involved in the native code,
+  our initial purpose is to use it in type inference for <r/> code, i.e., scripts and functions.
+  We do this in <omg:pkg>RTypeInference</omg:pkg>, but only for <r/>-level code.
+  Our goal is to be able to process code such as
+<r:code>
+function(n = 100, mu = 0, sd = 1, nSteps = 1000)    
+{
+   x = mkData(n, mu, sd)
+   ans = .Call("R_fun", x, nSteps)
+   ans$cumulative = sum(ans$x)
+   ans
+}
+</r:code>
+and be able to determine the types of x and ans.
+<r:func>mkData</r:func> is a regular <r/>-level function and the type inference can get
+the expected input types and return type.
+We want to be able to do the same for the <r:func>.Call</r:func>
+and get the expected input types and return type.
+</para>
+
+
+
+
+<para>
+  The details of how we recover this information from the native code vary slightly
+  depending on the optimization level we use to generate the <ir/> code.
+  Specifically the current code in <file>getType.R</file> assumes level 1 or 2
+  and doesn't give full results for un-optimized code (O0).
+  This is an implementation issue as the information is in the <ir/>
+  but just requires traversing additional paths.
+  This does illustrate a difference between using the <ir/> rather than
+  the AST (i.e. parsing the original <c/>/<cpp/> code.
+</para>
+
+
+
+</section>
