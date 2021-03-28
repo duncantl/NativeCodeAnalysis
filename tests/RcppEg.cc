@@ -1,8 +1,6 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 
-
-
 // [[Rcpp::export]]
 NumericVector row_max(NumericMatrix m) {
     int nrow = m.nrow();
@@ -13,6 +11,4 @@ NumericVector row_max(NumericMatrix m) {
     return max;
 }
 
-/*
-export PKG_CXXFLAGS=`Rscript -e "Rcpp:::CxxFlags()"`
-*/
+/*  export PKG_CXXFLAGS=`Rscript -e "Rcpp:::CxxFlags()"`  */
