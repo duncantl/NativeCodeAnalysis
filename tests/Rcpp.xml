@@ -1,0 +1,193 @@
+<section>
+<title></title>
+
+<para>
+  The <r:pkg>Rcpp</r:pkg> package provides a different <cpp/> API for operating on <r/> objects
+  in native code. Accordingly, our approach won't necessarily handle <r:pkg>Rcpp</r:pkg>-based code.
+  We examine here some examples and see what is similar and what is different.
+</para>
+<para>
+Consider the example routine
+<r:code>
+<xi:include href="RcppEg.cc" parse="text"/>
+</r:code>  
+Unlike the regular <r/> API, this identifies the return type explicitly as
+a NumericVector so we know it is a numeric vector.
+Also, the argument is a NumericMatrix, so again, we know it is numeric
+and matrix.
+Presumably the code that <r:pkg>Rcpp</r:pkg> generates to invoke
+this routine from <r/> performs the relevant check and/or coercion to ensure
+that argument is a numeric matrix.<check/>
+</para>
+
+<para>
+  Should we use work directly from the <cpp/> code and use the AST approach?
+  This would allow us to get the return type and arguments
+  more directly and preserve the naming information that gives their
+  types, e.g. NumericVector and NumericMatrix.
+  However, now have to train our <r/> functions analyzing the <r:pkg>Rcpp</r:pkg> <cpp/>
+  about <r:pkg>Rcpp</r:pkg>'s interface, e.g. m.nrow(), NumericVector vec(n),
+  Rcpp::max, max[i], m(i, _).
+  This isn't very hard, but we have to do it somewhat manually, i.e., mapping
+  the methods, syntax and conventions in the <r:pkg>Rcpp</r:pkg> classes
+  and API. This is what we did for <r/>'s API and it would be simpler
+  if we could map directly to that <r/> API.
+  We might do that by programmatically analyzing the <r:pkg>Rcpp</r:pkg>
+  API or do it manually.
+  However, if we
+</para>
+<para>
+We created the <ir/> code from <file>RcppEg.cc</file> using 4 different  optimization levels <emdash/> 0, 1, 2, 3.
+O2 and O3 give identical results, so we only look at 0, 1 and 2.
+We read the resulting <ir/> code for each optimization level and find the
+names of the routines that are called directly in the <c:func>row_max</c:func> routine:
+<r:code>
+mods = lapply(list.files(pattern = "RcppEgO.*.ir"), parseIR)
+funs = lapply(mods, function(m) { funs = getModuleFunctions(m); funs[[ grep("row_max", names(funs))  ]]})
+fcalls = lapply(funs, function(f) { ins = getInstructions(f); ins[sapply(ins, is, "CallBase")]})
+sapply(fcalls, length)
+lapply(fcalls, function(calls) table(sapply(calls, function(x) demangle(getName(getCalledFunction(x))))))
+<r:output><![CDATA[
+$RcppEgO0.ir
+
+                                                                                              Rcpp::internal::NamedPlaceHolder::~NamedPlaceHolder() 
+                                                                                                                                                  2 
+                                                                                              Rcpp::Matrix<14, Rcpp::PreserveStorage>::nrow() const 
+                                                                                                                                                  1 
+                                                         Rcpp::Matrix<14, Rcpp::PreserveStorage>::operator()(int, Rcpp::internal::NamedPlaceHolder) 
+                                                                                                                                                  1 
+Rcpp::sugar::Max<14, true, Rcpp::MatrixRow<14> > Rcpp::max<14, true, Rcpp::MatrixRow<14> >(Rcpp::VectorBase<14, true, Rcpp::MatrixRow<14> > const&) 
+                                                                                                                                                  1 
+                                                                          Rcpp::sugar::Max<14, true, Rcpp::MatrixRow<14> >::operator double() const 
+                                                                                                                                                  1 
+                                                                                                 Rcpp::Vector<14, Rcpp::PreserveStorage>::~Vector() 
+                                                                                                                                                  2 
+                                                                                          Rcpp::Vector<14, Rcpp::PreserveStorage>::operator[](long) 
+                                                                                                                                                  1 
+                                                                                        Rcpp::Vector<14, Rcpp::PreserveStorage>::Vector(int const&) 
+                                                                                                                                                  1 
+
+$RcppEgO1.ir
+
+                                                                                                                             llvm.lifetime.end.p0i8 
+                                                                                                                                                  6 
+                                                                                                                           llvm.lifetime.start.p0i8 
+                                                                                                                                                  3 
+                                                                                              Rcpp::internal::NamedPlaceHolder::~NamedPlaceHolder() 
+                                                                                                                                                  2 
+                                                                                              Rcpp::Matrix<14, Rcpp::PreserveStorage>::nrow() const 
+                                                                                                                                                  1 
+                                                         Rcpp::Matrix<14, Rcpp::PreserveStorage>::operator()(int, Rcpp::internal::NamedPlaceHolder) 
+                                                                                                                                                  1 
+Rcpp::sugar::Max<14, true, Rcpp::MatrixRow<14> > Rcpp::max<14, true, Rcpp::MatrixRow<14> >(Rcpp::VectorBase<14, true, Rcpp::MatrixRow<14> > const&) 
+                                                                                                                                                  1 
+                                                                          Rcpp::sugar::Max<14, true, Rcpp::MatrixRow<14> >::operator double() const 
+                                                                                                                                                  1 
+                                                                                                 Rcpp::Vector<14, Rcpp::PreserveStorage>::~Vector() 
+                                                                                                                                                  1 
+                                                                                          Rcpp::Vector<14, Rcpp::PreserveStorage>::operator[](long) 
+                                                                                                                                                  1 
+                                                                                        Rcpp::Vector<14, Rcpp::PreserveStorage>::Vector(int const&) 
+                                                                                                                                                  1 
+
+$RcppEgO2.ir
+
+                                                                                                                                 __clang_call_terminate 
+                                                                                                                                                      2 
+                                                                                                                               __cxa_allocate_exception 
+                                                                                                                                                      1 
+                                                                                                                                  __cxa_call_unexpected 
+                                                                                                                                                      1 
+                                                                                                                                            __cxa_throw 
+                                                                                                                                                      1 
+                                                                                                                                 llvm.lifetime.end.p0i8 
+                                                                                                                                                      5 
+                                                                                                                               llvm.lifetime.start.p0i8 
+                                                                                                                                                      4 
+                                                                                                                                        R_ReleaseObject 
+                                                                                                                                                      2 
+                                                                       Rcpp::PreserveStorage<Rcpp::Vector<14, Rcpp::PreserveStorage> >::set__(SEXPREC*) 
+                                                                                                                                                      1 
+                                                                              Rcpp::sugar::Max<14, true, Rcpp::MatrixRow<14> >::operator double() const 
+                                                                                                                                                      1 
+                                                                                                                                         Rf_allocVector 
+                                                                                                                                                      1 
+std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > tinyformat::format<int, int>(char const*, int const&, int const&) 
+                                                                                                                                                      1 
+                                                                                                                           std::exception::~exception() 
+                                                                                                                                                      1 
+                                                                                                       void Rcpp::internal::r_init_vector<14>(SEXPREC*) 
+                                                                                                                                                      1 
+]]></r:output>
+</r:code>
+For 0 and 1 optimization levels, all of the routines are in the Rcpp <cpp/> namespace (except those from llvm.)
+In the routines from the O2 optimization level, we see <c:func>Rf_allocVector</c:func> from the <r/> API.
+Looking at that with
+<r:code>
+getAllUsers(mods[[3]]$Rf_allocVector)
+<r:output><![CDATA[
+[[1]]
+[1] "  %13 = invoke %struct.SEXPREC.135* @Rf_allocVector(i32 14, i64 %12)\n          to label %14 unwind label %32"
+]]></r:output>
+</r:code>
+we see that this does allocate a REALSXP (corresponding to 14).
+Also, while it is less direct than the <c/> API, this is the return value.
+This is returned via the first parameter of the routine which is a pointer to Rcpp::Vector instance
+<r:output><![CDATA[
+void _Z7row_maxN4Rcpp6MatrixILi14ENS_15PreserveStorageEEE ( %"class.Rcpp::Vector.145"* NA, %"class.Rcpp::Matrix.148"* NA )
+]]></r:output>
+via the call to set__ in the <c:type>Rcpp::PreserveStorage</c:type> (templated) class.
+Then the underlying <c:type>SEXP</c:type> that it contains is marshaled back to <r/>.
+</para>
+
+
+<para>
+  The call to <c:func>ReleaseObject</c:func> doesn't change the nature of the <r/> object, but merely
+  allows it to be garbage collected. It is an artifact of <r:pkg>Rcpp</r:pkg>.  We do not need to concern
+  ourselves with.
+</para>
+
+
+<para>
+  The other routines are Rcpp::sugar::Max::operator double() and Rcpp::internal::r_init_vector.
+  The former returns a double and we can think of it working on the opaque structure.
+  The r_init_vector method merely connects the <c:type>SEXP</c:type> to the <r:pkg>Rcpp</r:pkg> wrapper object.
+</para>
+
+
+<para>
+Note that the O2-optimized code has discarded the specific types of the Rcpp::Vector and Rcpp::Matrix, i.e., that they
+are numeric.
+However, we can deduce the return type as numeric as we mentioned, and the call to r_init_vector also indicates REALSXP
+(14) in the template value.
+</para>
+
+
+<section>
+<title>The <r:pkg>epiphy</r:pkg> Package</title>
+
+<para>
+  The <r:pkg>epiphy</r:pkg> package uses <r:pkg>Rcpp</r:pkg>.
+  We'll look at some of its code as an example, specifically the file <file>RcppExports.cpp</file>.
+</para>
+
+
+<para>
+  
+<r:code>
+m = parseIR("RcppExports.ir")
+stripDebugInfo(m)
+funs = getModuleFunctions(m)
+demangle(names(funs))
+</r:code>
+
+<r:code>
+ins = getInstructions(funs$"_epiphy_p_hscaled")
+length(ins)
+</r:code>
+</para>
+
+</section>
+
+
+</section>
