@@ -38,7 +38,7 @@ t2c(SEXP x, SEXP y)
     if(!isReal(x) || !isInteger(y))
 	error("x has to be numeric and y an integer");
     
-    return(ScalarReal(REAL(x)[0] + REAL(y)[0]));
+    return(ScalarReal(REAL(x)[0] + INTEGER(y)[0]));
 }
 
 
@@ -79,6 +79,26 @@ t6(SEXP x)
 {
     if(!( isReal(x) || isInteger(x) ))
 	error("x is not a real or integer vector");
+    
+    return(ScalarReal(asReal(x)));
+}
+
+
+SEXP
+t7(SEXP x)
+{
+    if(TYPEOF(x) != REALSXP)
+	error("x is not a real ");
+    
+    return(ScalarReal(REAL(x)[0]));
+}
+
+
+SEXP
+t8(SEXP x)
+{
+    if(TYPEOF(x) != REALSXP && TYPEOF(x) != INTSXP)
+	error("x is not a numeric or integer");
     
     return(ScalarReal(asReal(x)));
 }
