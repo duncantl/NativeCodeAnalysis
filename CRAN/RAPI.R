@@ -30,11 +30,11 @@ cf = lapply(bcs, getCalledFunctions)
 
 Rmain = parseIR("~/R-devel/build/src/main/Rmain.bc")
 rfuns = getDefinedRoutines(Rmain, names = FALSE)
-
+visRfuns = rfuns[ ! (sapply(rfuns, getLinkage) %in% c(Rllvm:::InternalLinkage, Rllvm:::PrivateLinkage)) ]
 
 ## Calls to Routines in R
 
-cf2 = lapply(cf, function(x) lapply(x, function(x) x[(x %in% names(rfuns)) ]))
+cf2 = lapply(cf, function(x) lapply(x, function(x) x[(x %in% names(visRfuns)) ]))
 cf3 = lapply(cf2, function(x) x[ sapply(x, length) > 0 ])
 
 tt = sort(table(unlist(cf3)), decreasing = TRUE)
@@ -107,6 +107,35 @@ saveRDS(tt, "SetAttribSymbolNames.rds")
 
 
 
+##  R engine code that sets attributes
+#   and also probably more important that reads it.
+sa = getSetAttrCalls(Rmain)
+table(sapply(sa[sapply(sa, is, "GlobalVariable")], getName))
+
+sa[sapply(sa, is, "PHINode")]
+
+cw = sapply(sa, is, "CallInst")
+iw = grepl("Rf_install", sapply(sa[cw], function(x) getName(getCalledFunction(x))))
+
+#sapply(sa[cw][iw], function(x) getValue(x[[1]]))
+wc = sapply(sa[cw][iw], is, "ConstantExpr")
+
+
+##
+# The attributes the R engine reads, i.e., that may influence how R operates on an object.
+ga = getSetAttrCalls(Rmain, "Rf_getAttrib")
+table(sapply(ga, class))
+# 89 is one of 3 PHI  nodes and we get infinite recursion.
+sym = sapply(ga[-89], getSymbolName)
+table(unlist(sym))
+saveRDS(sym, "AttributesReadByREngine.rds")
+# Note R_getS4DataSlot.s_dotData   R_getS4DataSlot.s_xData
+# These have the prefix name of the routine as they are defined a static within that routine.
+
+#########
+
+
+
 #####
 # Sets S3 Class Attribute
 
@@ -126,3 +155,15 @@ s4CPkgs = names(s4Calls)[nn > 0]
 
 saveRDS(s4CPkgs, "S4CPkgs.rds")
 
+
+
+
+
+############################
+# Understanding the file and line parameters of LENGTH_EX
+
+lex = getCallsTo(Rmain, "LENGTH_EX")
+# Only 3 of them.
+
+sapply(lex, function(x) getValue(x[[2]][[1]]))
+sapply(lex, function(x) getValue(x[[3]]))
