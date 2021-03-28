@@ -1,6 +1,6 @@
 #
 # This is code that aims to find routines which test the type of a SEXP
-# and raise an error if the test is not true.  These are essentially assertions
+# and then raise an error if the test is not true.  These are essentially assertions
 # that tell us what the expected type is. These provide slightly more information about the 
 # type than how it is used (e.g. inferParamType)
 
@@ -15,6 +15,25 @@
 #     }
 # }
 #
+
+
+#
+#
+# Look at all the packages that contain calls to Rf_error{,call}
+
+# w = sapply(errPkgs, function(x){ m = readBitcode(file.path("~/CRAN2/Pkgs", x, "src/all.bc"));
+#            try(sapply(getDefinedRoutines(m, names = FALSE) , function(f) !all(sapply(testType(f), is.null))))})
+# table(sapply(w, any))
+#
+#  179 seem to have code that tests one or more parameters. 
+#
+#
+#  DSL package and _collector2 isn't quite right.  Get's Rf_isNull() but the error is not directly related to this.
+#
+#   mm = readBitcode("~/CRAN2/Pkgs/DSL/src/all.bc")
+#   testType(mm$"_collector2")
+#
+
 
 testType =
     #
@@ -49,7 +68,7 @@ function(p, uses = getAllUsers(p))
         return(fnNames)
     }
 
-    return(NULL)        
+    NULL
 }
 
 
@@ -80,6 +99,9 @@ branchesToError =
 function(cmp, index = 3L)
 {
     u = getAllUsers(cmp)
+    if(length(u) == 0)
+        return(FALSE)
+    
     if(length(u) > 1) {
         # Not certain how robust this is but analyzes all the users, not just the first.
         return(any(sapply(u, function(i)  if(is(i, "BranchInst")) leadsToError(i[[index]]) else branchesToError(i))))
