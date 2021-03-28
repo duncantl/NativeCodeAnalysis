@@ -37,3 +37,14 @@ export(findDotCallRoutines, isDotCall)
 
 
 export(getCalledFunctions, getCallsTo)
+
+
+
+export(getRErrorMessages)
+exportMethods(getRErrorMessages)
+
+
+export(testType)
+
+export(findSEXPTypesFromSwitch)
+
