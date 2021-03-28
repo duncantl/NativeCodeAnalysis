@@ -3,6 +3,8 @@ library(NativeCodeAnalysis)
 
 m = parseIR("class.ir")
 
+funNames = getDefinedRoutines(m)
+
 mk2 = compReturnType(m$mk2)
 # doesn't get the class names.
 
