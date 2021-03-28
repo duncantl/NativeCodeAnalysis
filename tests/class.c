@@ -82,12 +82,20 @@ listEls2(SEXP a)
     return(ans);
 }
 
+SEXP
+listEls3(SEXP a)
+{
+    return(listEls2(a));
+}
+
+
 /*
  This one calls listEls2 and then passes the result to setElNames
  which merely adds to the one parameter and returns it. 
- */
+*/
+
 SEXP
-listEls3(SEXP a)
+listEls4(SEXP a)
 {
     return(setElNames(listEls2(a)));
 }
