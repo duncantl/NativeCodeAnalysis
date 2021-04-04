@@ -1,0 +1,120 @@
+<article
+   xmlns:r="http://www.r-project.org"
+	 xmlns:c="http://www.C.org">
+
+  <articleinfo>
+    <title></title>
+    <author>
+      <firstname>Duncan</firstname>
+      <surname>Temple Lang</surname>
+    </author>
+  </articleinfo>
+
+<section>
+<title>Finding Conditional Calls to <c:func>SET_VECTOR_ELT</c:func></title>
+
+<para>
+  We were interested in finding conditional calls to <r/>'s <c:func>SET_VECTOR_ELT</c:func>
+  in <c/> code in <r/> packages.
+  The reason is to identify cases when either the length of a list or the types of elements in a list
+  are conditional.  This is in the context of inferring types of <r/> objects returned by <c/> routines.
+</para>
+<para>
+  As usual, we can examine the <ir/>  code or work with the source code via the AST.
+  Typically we use the <ir/> code.
+  However, it is not immediately obvious how we can determine if a particular call to
+  <c:func>SET_VECTOR_ELT</c:func> is conditional.
+</para>
+
+<section>
+<title><ir/></title>
+
+<para>
+  One approach is, for each routine, find all calls to <c:func>SET_VECTOR_ELT</c:func>.
+  Then see if this call post-dominates the routine's entry block (or an instruction in the entry block.)
+</para>
+
+<para>
+  Consider a call to <c:func>SET_VECTOR_ELT</c:func> in a loop.
+  If we use O0 or O1 optimization when generating the <ir/> code,
+  loops will have a conditional test to see if we should enter them.
+  So there will be two paths to the  end of the routine - one through the body of the loop
+  and another to the end of the loop.
+  If we use O2 optimization, the loop can become unconditional.
+</para>
+
+
+<para>
+  If a routine conditionally calls return or throws an error, again
+  there will be a different path to the end of the routine and so a subsequent 
+  <c:func>SET_VECTOR_ELT</c:func> call won't post-dominate
+  the entry block.
+  So we will identify the <c:func>SET_VECTOR_ELT</c:func> as being conditional,
+  but not in the sense we mean.
+</para>
+
+
+
+</section>
+
+<section>
+<title>AST</title>
+
+<para>
+  Using the AST, we can find all <c:keyword>if</c:keyword> statements in a routine
+  and then for each of these, iterate over its subtree to find any calls to <c:func>SET_VECTOR_ELT</c:func>.
+  We can write a collector function to capture the <c:keyword>if</c:keyword>   statements as
+<r:function><![CDATA[
+genGetIf = function()
+{
+    ifs = list()
+    function(cur, parent) {
+             if(cur$kind == CXCursor_IfStmt)
+                 ifs[[length(ifs) + 1L]]  <<- cur
+             2L
+    }
+}
+]]></r:function>  
+We use it on a translation unit or routine with
+<r:code>
+f2 = genGetIf()
+visitTU(tu, f2, TRUE)
+ifs = environment(f2)$ifs
+</r:code>
+
+</para>
+
+
+<para>
+  Given one of these <c:keyword>if</c:keyword>   statements, we can implement
+  the code to find the <c:func>SET_VECTOR_ELT</c:func> calls with
+<r:function><![CDATA[
+getSetVectorElt =
+function(cmd)
+{
+    ans = list()
+    f = function(cur, parent) {
+          if(cur$kind == CXCursor_CallExpr && getName(cur[[1]]) == "SET_VECTOR_ELT") {
+              ans[[length(ans) + 1L]] <<- cur
+          }
+          2L
+    }
+    visitChildren(cmd, f, TRUE)
+    ans
+}
+]]></r:function>
+where <r:arg>cmd</r:arg> is the <c:keyword>if</c:keyword> statement.
+</para>
+
+
+<para>
+We can do this for all the routines in a translation unit and for all of the files in the <dir>src</dir> directory of
+the <r/> package
+</para>
+
+
+
+</section>
+</section>
+
+</article>
