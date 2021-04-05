@@ -102,9 +102,14 @@ if(FALSE) {
     flags = gsub("PKG_C(PP)?FLAGS *=", "", tmp)
 
 } else {
+    #XXXX Not getting the flags from R itself
+    # for the laGP package, we need the -DNDEBUG that R provides to avoid the error from gp_sep.c 
+    # about gab not being a field in a struct 
     flags = system(sprintf("R CMD make -f $HOME/MyMake flags PKG_DIR=%s", d), intern = TRUE)
 }
 
+    flags = gsub("(^|[[:space:]])-I ", " -I", flags) # deformula package has a space between -I and include
+    
     vals = unlist(strsplit(flags, "[[:space:]]+"))
 
     

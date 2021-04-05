@@ -28,3 +28,32 @@ badPkgs = gsub('(^\\[1\\] "|"$)', "", sapply(g[bad], `[`, 1))
 
 
 system.time({tmp.bad = lapply(badPkgs, function(d) { print(d); try(processDir(d))}) })
+
+names(tmp.bad) = basename(dirname(badPkgs))
+
+tmp.bad2 = lapply(tmp.bad, function(files) {  z = lapply(files, function(f)  f[ sapply(f, length) > 0]); z[ sapply(z, length) > 0]})
+tmp.bad3 = tmp.bad2[ sapply(tmp.bad2, function(x) length(unlist(x))) > 0 ]
+
+
+
+
+
+
+###########
+updateNames =
+function(d, ans)
+{
+    cf = list.files(d, full = FALSE, pattern = "\\.(c|cpp|cc)$")
+    if(length(ans) == length(cf))
+        names(ans) = cf
+    ans
+}
+
+src = file.path("/Users/duncan/CRAN2/Pkgs", names(tmp2), "src")
+
+tmp22 = mapply(updateNames, src, tmp2)
+
+
+nn = sapply(tmp22, function(x) length(unlist(x)))
+tmp3 = tmp22[nn > 0]
+tmp42 = lapply(tmp3, function(files) {  z = lapply(files, function(f)  f[ sapply(f, length) > 0]); z[ sapply(z, length) > 0]})
