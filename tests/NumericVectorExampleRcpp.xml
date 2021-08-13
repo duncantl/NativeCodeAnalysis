@@ -1,9 +1,28 @@
 <section
-	 xmlns:ir="http://llvm.org/ir"
 	 xmlns:r="http://www.r-project.org"
 	 xmlns:c="http://www.C.org"
-	 xmlns:sh="http://www.shell.org">
-<title></title>
+	 xmlns:sh="http://www.shell.org"
+         xmlns:cpre="http://www.preprocessor.org"	
+	 xmlns:cpp="http://www.cplusplus.org"
+	 xmlns:ir="http://llvm.org/ir">
+<title><r/> Type Inference for <r:pkg>Rcpp</r:pkg> Code</title>
+
+<para>
+  In this document, we explore using the same basic approach as we do in <r:func>getRReturnTypes</r:func>
+  but applied to <r:pkg>Rcpp</r:pkg> native code.
+  This is potentially different   because a) it is <cpp/> code, b) it is templated,
+  c) it uses <cpp/> exceptions to handle errors, 
+  d) while built on the <r/> API, <r:pkg>Rcpp</r:pkg> uses its own syntactic sugar and idioms.
+</para>
+
+<para>
+  The short summary is that the same basic approach works, but we have to deal with a few <cpp/> differences
+  and utilize knowledge of a few <r:pkg>Rcpp</r:pkg> interface classes and methods, just as we did
+  "hard code" for the <r/> API.  In other words, these are the primitives we need to identify manually but from which
+  we can programmatically infer higher-level functionality and types.
+</para>
+
+
 
 
 <para>
@@ -57,13 +76,18 @@ return rcpp_result_gen;
 </c:code>
 and it would appear the code directly uses the return value from <c:func>NumericVectorExample</c:func> in a call to
 <c:func>Rcpp::wrap</c:func>.
-However, I suspect that the compiler is rearranging this call and the definition of the actual routine
+However, the compiler is rearranging this call and the definition of the actual routine
 <c:func>NumericVectorExample</c:func> to add a parameter that is used to return the result rather than returning it
 directly.
-This is because the <c:type>Rcpp::List</c:type> that <c:func>NumericVectorExample</c:func> returns is a regular object,
+This is because the <c:type>Rcpp::List</c:type> that <c:func>NumericVectorExample</c:func> returns is not a pointer but
+a regular <cpp/> object,
 like a struct and the compiler doesn't return regular objects on the stack, but via this additional parameter mechanism
-for the return value. Note however, that we don't see this additional parameter in its declaration in the
+for the return value. (We saw this in <r:pkg>RCIndex</r:pkg> and clang simple parsing where the callback routines
+are passed the CXCursor structl instances by value.) Note however, that we don't see this additional parameter in its declaration in the
 <file>RcppExports</file> module. It appears to have a single parameter, the numeric vector.
+Similarly, the compiler handles marshalling this return value to and from the call to
+<c:func>NumericVectorExample</c:func>
+and passing it to the call to <c:func>Rcpp::wrap</c:func>.
 So next, we will look at the <c:func>NativeVectorExample</c:func> routine.
 </li>
 
@@ -82,14 +106,15 @@ void _Z20NumericVectorExampleRKN4Rcpp6VectorILi14ENS_15PreserveStorageEEE ( %"cl
 ]]></r:output>
 </r:code>
 This version of the routine appears to have 2 parameters and their types are generic <c:type>Rcpp::Vector</c:type> classes without information that identifies
-which type of vector (logical, integer, numeric, etc.).  But we know the first parameter is for the return value
-and the second one is a <c:type>NumericVector</c:type> based on the demangled name in <file>RccExports</file>.
-We could also see where this second parameter is used in this routine to determine if that provide supporting or contradictory evidence that
+which type of vector (logical, integer, numeric, etc.).  But we know that the first parameter is for the return value
+and the second one (from examining the wrapper routine) is a <c:type>NumericVector</c:type> based on the demangled name
+of the called routine in <file>RccExports</file>.
+We could also see where this second parameter is used in this routine to determine if that provides supporting or contradictory evidence that
 it is a numeric vector. However, we assume it is correct and that the declaration and definition agree across the two
 <cpp/> files.
 </li>
 <li>
-Finding the <r/> type of the return value.
+Finding the specific <r/> type of the return value.
 From the signature of the routine, the return type is <c:type>void</c:type>.
 We know the result is marshaled back to the caller via the first argument.
 We see where in the routine that first argument is used (presumably set) by looking at all instructions that reference
@@ -103,7 +128,7 @@ There is a single use and it is call to
 k = u[[1]]
 demangle(getName(getCalledFunction(k)))
 <r:output><![CDATA[
-Rcpp::Vector<19, Rcpp::PreserveStorage>
+Rcpp::Vector<19, Rcpp::PreserveStorage> // return type
 Rcpp::Vector<19, Rcpp::PreserveStorage>::create__dispatch<Rcpp::traits::named_object<Rcpp::Vector<14,   Rcpp::PreserveStorage> >, Rcpp::traits::named_object<Rcpp::Vector<14, Rcpp::PreserveStorage> > >(
      Rcpp::traits::integral_constant<bool, true>,
      Rcpp::traits::named_object<Rcpp::Vector<14, Rcpp::PreserveStorage> > const&,
@@ -113,8 +138,16 @@ Rcpp::Vector<19, Rcpp::PreserveStorage>::create__dispatch<Rcpp::traits::named_ob
 (where we have formatted the string to show the return type, the name of the routine (with the templates) and the 3 parameters.)
 </li>
 <li>
-From the demangled name, we know the return value of this create__dispatch call is a list based on the value 19 in the
+From the demangled name, we know the return value of this <c:func>create__dispatch</c:func> call is a list based on the value 19 in the
 template type  corresponding to VECSXP, the list SEXPTYPE.
+</li>
+<li>
+  From the call above, we see that the <c:func>create_dispatch</c:func> method is a member of the templated class,
+  specialized for 19/list (  <r:class><![CDATA[Rcpp::Vector<19, ..>]]></r:class>), and that the
+  method itself is templated for two traits::named_object inputs, each containing a
+  <cpp:class><![CDATA[Rcpp::Vector<14,...>]]></cpp:class> vector. So again, based on a high-level understanding
+  of <r:pkg>Rcpp</r:pkg>, we "know" that this is list
+  with named elements and the elements are both numeric vectors.
 </li>
 <li>
 From the call, we see that the first parameter of <c:func>NumericVectorExample</c:func> is the first argument in this call to
@@ -127,6 +160,15 @@ sapply(k[1:3], identical, p[[1]])
 </r:code>
 </li>
 <li>
+<!-- 
+named_object
+  name is first element
+  set that with basic_string.
+  value comes from name.i.i.i
+    value of first element of a Rcpp::Argument - one element, a string.
+    where is this set?
+ -->
+  
 The two additional arguments are <c:type>Rcpp::traits::named_object</c:type> values:
 <r:code>
 sapply(k[2:3],  function(x) getName(getElementType(getType(x))))
@@ -138,7 +180,7 @@ sapply(k[2:3],  function(x) getName(getElementType(getType(x))))
 We want to find both the value and the name of each of these.
 </li>
 <li>
-We'll process both arguments in the same way for this call to create the List, but for now, we will focus on the second argument to describe the
+We'll process both arguments in the same way for this call that creates the List, but for now, we will focus on the second argument to describe the
 steps. We want the name and the <r/> type of the value of this element.
 We find the uses, other than the one in this call <r:var>k</r:var> that creates the list, and for each of these uses
 we'll find the next immediate uses of them:
@@ -179,26 +221,28 @@ au2 = lapply(u2, function(x) c(x, getAllUsers(x)))
 </r:code>
 The first of these is memory bookkeeping and not of interest to us in finding the types and names of elements in <r/>
 objects.
-The second set of uses accesses the first field in the <c:type>Rcpp::traits:named_object</c:type> structure/class.
+<para>
+The second set of uses accesses the first field in the <c:type>Rcpp::traits:named_object</c:type> structure/class (via a
+GEP instruction) and then assigns a value to it.
 From the <ir/> code or querying the type definition in <r/>, we see the definition of this type is:
 <ir:code>
 %"class.Rcpp::traits::named_object" = type { %"class.std::__1::basic_string"*, %"class.Rcpp::Vector"* }
 </ir:code>
-So the first element is a string and is the name for the named object, and the second element is the associated <r/>
+So the first element is a <cpp/> string and is the name for the named object, and the second element is the associated <r/>
 object (more precisely the <r:pkg>Rcpp</r:pkg> object representing this <r/> object.)
 We want to find the value of the name to see if it is fixed/known at compile time.
-We can follow the value for the name of this element by looking at what is being stored in %30, the name field in the
-named_object which is %ref.tmp. Specifically, we know the second instruction in this set of uses is setting the first
-field of the named_object to the value of %name.i.i.i.  So where is that defined
+We can follow the value for the name of this element by looking at what is being stored in <ir:var>%30</ir:var>, the name field in the
+<r:class>traits::named_object</r:class> (which is <ir:var>%ref.tmp</ir:var>.) Specifically, we know the second instruction in this set of uses is setting the first
+field of the named_object %ref.tmp to the value of %name.i.i.i.  So where is %name.i.i.i defined?
 <r:code>
 au2[[2]][[2]][[1]]
 <r:output><![CDATA[
 [1] "  %name.i.i.i = getelementptr inbounds %\"class.Rcpp::Argument.56\", %\"class.Rcpp::Argument.56\"* %ref.tmp8, i64 0, i32 0"
 ]]></r:output>
 </r:code>
-This is accessing the first field in an <c:type>Rcpp::Argument</c:type> object.
+This is accessing the first field in an <c:type>Rcpp::Argument</c:type> object (again via a GEP.)
 Again, from the IR or <r/> query, we can learn that the <c:type>Rcpp::Argument</c:type> has a single field which is a string.
-So we want to find where that Rcpp::Argument is defined and its field's value set so we can determine that value:
+So we want to find where this instance of the  <cpp:class>Rcpp::Argument</cpp:class> (%ref.tmp8) is defined and its field's value set so we can determine that value:
 <r:code>
 arg = au2[[2]][[2]][[1]][[1]]
 c(arg, getAllUsers(arg ))
@@ -219,8 +263,9 @@ c(arg, getAllUsers(arg ))
 [1] "  %__data_.i.i.i.i.i117 = getelementptr inbounds %\"class.Rcpp::Argument.56\", %\"class.Rcpp::Argument.56\"* %ref.tmp8, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 2"
 ]]></r:output>
 </r:code>
-This <c:type>Rcpp::Argument</c:type> object is assigned to %ref.tmp8.
-The last two users of this access the same element in the Argument structure and are deep/multi-level acessors.
+This <c:type>Rcpp::Argument</c:type> object is assigned to <ir:var>%ref.tmp8</ir:var>.
+The last two users of this access the same element in the <cpp:class>Rcpp::Argument</cpp:class> structure and are deep/multi-level accessors.
+</para>
 <para>
 It might be easier to look at the <r:class>BasicBlock</r:class>s in which the name is set
 <ir:code>
@@ -247,9 +292,12 @@ invoke.cont6:                                     ; preds = %for.body.i, %middle
           to label %invoke.cont15 unwind label %lpad12</red>
 </ir:code>
 Heuristically, (following the highlighted code), the code is allocating a <c:type>std::string</c:type> variable to
-%ref.tmp9, and then (in a different block) casts this to a memory address (i8*) yielding %29.
-Next, the code stores the value 12 in this address, then casts the %ref.tmp9 std::string to a basic string of char elements of type
-short, assigning this to %__s.i.i.i.i.  Then we get the address of the 2nd element (note the 3rd index) of this value and then call <c:func>memcpy</c:func>.  The second argument is
+<ir:var>%ref.tmp9</ir:var>, and then (in a different block) casts this to a memory address (i8*) yielding %29.
+Next, the code stores the value 12 (an ASCII form feed character) in this address, then casts the %ref.tmp9 std::string to a
+<cpp:class>basic_string</cpp:class> of <c:type>char</c:type>
+elements (with "sub-type" short), assigning this to <ir:var>%__s.i.i.i.i</ir:var>.  Then we get the address of the 2nd
+element (note the 3rd index) of this value which on my machine is a [23 x i8] array.  Then we call
+<c:func>memcpy</c:func> to set the value of this array.  The second argument is
 @.str  and this is the literal string value.
 <r:code>
 m2[[".str"]]
@@ -262,21 +310,35 @@ getValue(m2[[".str"]])
 ]]></r:output>
 </r:code>
 </para>
+<para>
+  The final highlighted instruction uses this literal value to set <ir:var>name.i.i.i</ir:var>.
+  Recall, this was the first element of the <cpp:class>Rcpp::Argument</cpp:class> object
+  and is the value that is stored in the
+  first element of our <cpp:class>Rcpp::traits::named_object</cpp:class> representing the first
+  element of the List being returned.  So, somewhat indirectly, the name of the first element
+  in this List is <literal>result</literal>.
+</para>
+<para>
+  The indirect path to the value comes from the use of <r:pkg>Rcpp</r:pkg>  objects
+  which contain a <cpp:class>std::basic_string</cpp:class>, and setting these and the contents of the
+  basic string. In other words, there is quite a bit of 'boxing' involved, but it is a matter of dereferencing
+  these carefully to get the ultimate value.
+</para>
 </li>
 <li>
-We have the name for the first element of the list.
+We now have the name for the first element of the list.
 We next need to find the <r/> object for this element.
 This appears to happen in the third set of users for the second argument, specifically
 <r:output><![CDATA[
 [1] "  %31 = getelementptr inbounds %\"class.Rcpp::traits::named_object.49\", %\"class.Rcpp::traits::named_object.49\"* %ref.tmp, i64 0, i32 1"
 [1] "  store %\"class.Rcpp::Vector.46\"* %vec, %\"class.Rcpp::Vector.46\"** %31, align 8"
 ]]></r:output>
-The first of these gets the memory address of the second element of the %ref.tmp, our
+The first of these 2 instructions gets the memory address of the second element of the <ir:var>%ref.tmp</ir:var>, our
 <c:type>Rcpp::traits::named_object</c:type> that is being used/set as the first element of our resulting list.
-We saw that the <c:type>named_object</c:type> consists of the std::basic_string and the <r:pkg>Rcpp</r:pkg> object
+We saw that the <c:type>named_object</c:type> consists of the <cpp:class>std::basic_string</cpp:class> and the <r:pkg>Rcpp</r:pkg> object
 representing the <r/>  object/value.  So this second element is the <r:pkg>Rcpp</r:pkg> object.
-The second instruction stores %vec into this second element of the <c:type>named_object</c:type>.
-So we look at it and how it was created and modified.
+The second instruction stores <ir:var>%vec</ir:var> into this second element of the <c:type>named_object</c:type>.
+So we are interested in the value being stored and look at <ir:var>vec</ir:var> and how it was created and modified:
 <r:code>
 v = au2[[3]][[2]][[1]]
 <r:output><![CDATA[
@@ -284,7 +346,9 @@ v = au2[[3]][[2]][[1]]
 ]]></r:output>
 </r:code>
 We see it is a generic <c:type>Rcpp::Vector</c:type> object, but this doesn't tell us what type of <r/> object it will contain.
-There are two types of generic Rcpp::Vector in the <ir/> code:
+There are two types of generic Rcpp::Vector in the <ir/> code - both with an <r/> preserve storage value, and
+differing in the second field being a traits::r_vector_cache or a traits::proxy_cache object.
+The particular type for <ir:var>vec</ir:var> has fields with types
 <r:code>
 sapply(getFields(getElementType(getType(v))), getName)
 <r:output><![CDATA[
@@ -292,10 +356,10 @@ sapply(getFields(getElementType(getType(v))), getName)
 [2] "class.Rcpp::traits::r_vector_cache.48"
 ]]></r:output>
 </r:code>
-(The other type has a traits::proxy_cache object as the second field.)
 
 <para>
-  We find the uses of %vec:
+We are more interested in how <ir:var>%vec</ir:var> is manipulated and populated than how it is allocated, so we find
+its uses:
 <r:code>
 getAllUsers(v)
 <r:output><![CDATA[
@@ -315,10 +379,11 @@ getAllUsers(v)
 [1] "  store %\"class.Rcpp::Vector.46\"* %vec, %\"class.Rcpp::Vector.46\"** %31, align 8"
 ]]></r:output>  
 </r:code>  
-We are interested in how the first element of %vec is set. This corresponds to accessing the GEP for 0, 0, 0, i.e.,
-the second use.
+We are interested in how the first element of <ir:var>%vec</ir:var> is set as this is the <r/> object; the
+r_vector_cache field is for attribute-like information(?).  The first element corresponds to accessing the GEP for 0, 0, 0, i.e.,
+the second instruction in the use set. Similarly, the 4th instruction gets a reference to the first element of <ir:var>vec</ir:var>.
 <fix>(Figure out why we need 3 levels)</fix>
-So we get all uses of the second instruction above:
+For now, we focus on the 2nd instruction and we get all uses of the second instruction above:
 <r:code>
 a = getAllUsers(v)[[2]]
 getAllUsers(a)
@@ -351,7 +416,7 @@ So this just initializes the value to <r:null/>, not the real value in which we 
 </para>
 
 <para>
-We return to <r:var>v</r:var>, the instruction creating %vec, and look all the users of its users:
+We return to <r:var>v</r:var>, the instruction creating <ir:var>%vec</ir:var>, and look all the users of its users:
 <r:code>
 vu = lapply(getAllUsers(v), function(x) c(x, getAllUsers(x)))
 <r:output><![CDATA[
@@ -364,15 +429,18 @@ vu = lapply(getAllUsers(v), function(x) c(x, getAllUsers(x)))
 ...
 ]]></r:output>
 </r:code>
-We see access the first element of %vec, and then using that in a call to a routine:
+We see that the first of these accesses the first element of <ir:var>%vec</ir:var>, and then uses that in a call to a routine:
 <r:code>
 demangle(getName(getCalledFunction(vu[[4]][[2]])))
 <r:output><![CDATA[
 [1] "Rcpp::PreserveStorage<Rcpp::Vector<14, Rcpp::PreserveStorage> >::set__(SEXPREC*)"  
 ]]></r:output>
 </r:code>
-So we know that the <r/> object is a numeric vector, i.e., with SEXPTYPE 14.
-And we can examine the value to which it is being set with
+So we know from the template information that the <r/> object is a numeric vector, i.e., with <c:type>SEXPTYPE</c:type> 14,
+<cpre:define>REALSXP</cpre:define>.
+The value in the call to set__ is a regular <c:type>SEXP</c:type>, an <r/>, not <r:pkg>Rcpp</r:pkg> object.
+And we can examine the value to which it is being set (i.e., the second argument in the call to set__ after the implicit
+<cpp:this/>) with
 <r:code>
 vu[[4]][[2]][[2]]
 <r:output><![CDATA[
@@ -386,7 +454,7 @@ vu[[4]][[2]][[2]][[2]]
 <r:output><![CDATA[
 [1] "  %call2.i = tail call i64 @Rf_xlength(%struct.SEXPREC.41* %1)"
 ]]></r:output>
-vu[[4]][[2]][[2]][[2]][[1]][[2]] # first argument of call to Rf_xlength
+vu[[4]][[2]][[2]][[2]][[1]] # first argument of call to Rf_xlength
 <r:output><![CDATA[
 [1] "  %1 = load %struct.SEXPREC.41*, %struct.SEXPREC.41** %data.i.i, align 8, !tbaa !3"
 ]]></r:output>
@@ -394,22 +462,26 @@ vu[[4]][[2]][[2]][[2]][[1]][[1]] # object being loaded
 <r:output><![CDATA[
 [1] "  %data.i.i = getelementptr inbounds %\"class.Rcpp::Vector.46\", %\"class.Rcpp::Vector.46\"* %orig, i64 0, i32 0, i32 0"
 ]]></r:output>
+vu[[4]][[2]][[2]][[2]][[1]][[1]][[1]]
+<r:output><![CDATA[
+[1] "%\"class.Rcpp::Vector.46\"* %orig"
+]]></r:output>
 </r:code>
-And here we see that this is operating on the <r/> object in the input parameter orig.
+And here we see that this is operating on the <r/> object that is in the input parameter <c:arg>orig</c:arg>.
+So the length of this first element of the returned List has the same length as the parameter <c:arg>orig</c:arg>.
 </para>
 
-
 <para>
-  So we have the name, the type, and even the symbolic length of the first element of our list that is the result
-  of this routine.
+So we have the name, the type, and even the symbolic length of the first element of our list that is the result
+of this routine.
 </para>
 
 </li>
 <li>
   To strengthen our understanding of how to recover the name of the named objects
-  and navigate the std:string, Rcpp::Argument, casting, memcpy, etc., we'll see how this is done
+  and navigate the <cpp:class>std:string</cpp:class>, <cpp:class>Rcpp::Argument</cpp:class>, casting, memcpy, etc., we'll see how this is done
   for the second element (third element of <r:var>k</r:var>.)
-  The <ir/> name of the third argument is %ref.tmp17:
+  The <ir/> name of the third argument is <ir:var>%ref.tmp17</ir:var>:
 <r:code>
 getName(k[[3]])
 </r:code>
@@ -457,15 +529,15 @@ au3 = lapply(getAllUsers(k[[3]]), function(x) c(x, getAllUsers(x)))
 
 ]]></r:output>
 </r:code>  
-We see a similar pattern to the uses of the first element of the list.
+We see a similar pattern to the uses as we did when analyzing the first element of the list.
 We are interested in the second set of uses as this sets the first element of the named_object.
 The first set of uses is bookkeeping, the third sets the <r:pkg>Rcpp</r:pkg>/<r/> object field and the fourth
 is the creation  the list that we didn't omit.
 </para>
 
 <para>
-  In the second set of uses, the first instruction is the GEP for the name field (more specifically one level further?).
-  The second instruction sets that to %name.i.i.i81, so we follow this.
+In the second set of uses, the first instruction is the GEP for the name field (more specifically one level further?).
+The second instruction sets that to <ir:var>%name.i.i.i81</ir:var>, so we follow this.
 <r:code>
   au3[[2]][[2]][[1]]
 <r:output><![CDATA[
@@ -476,8 +548,7 @@ Again, we see this relates to an <c:type>Rcpp::Argument</c:type>.
 We get all uses of this
 <r:code>
 z = getAllUsers(au3[[2]][[2]][[1]])
-<r:output><
-![CDATA[
+<r:output><![CDATA[
 [[1]]
 [1] "  invoke void @_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1ERKS5_(%\"class.std::__1::basic_string.50\"* nonnull dereferenceable(24) %name.i.i.i81, %\"class.std::__1::basic_string.50\"* nonnull align 8 dereferenceable(24) %ref.tmp19)\n          to label %invoke.cont25 unwind label %lpad22"
 
@@ -527,7 +598,7 @@ lapply(a3, function(x) c(x, getAllUsers(x)))
 ]]></r:output>
 </r:code>
 Again we see accessing the second field of the <c:type>Rcpp::Vector</c:type> (via a GEP) and then setting its value.
-The value is the first element of the second instruction shown, specifically %orig.
+The value is the first element of the second instruction shown, specifically <ir:var>%orig</ir:var>.
 And this is the second parameter to the routine, i.e., the input parameter that follows the artificial first parameter
 created to marshal the return value.
 <r:code>
@@ -540,6 +611,7 @@ So we know that the second element of the list is a <c:type>NumericVector</c:typ
 the original input value. Since that was marked as const, we know it didn't change.
 (Do we know that it and it contents didn't change, including any element of the underlying <r/> vector, and the const
 doesn't just apply to the <r:pkg>Rcpp</r:pkg> fields?)
+</para>
 </li>
 </ol>
 </para>
@@ -699,7 +771,7 @@ The first parameter in the actual <c:type>Function</c:type> object is used for r
 <para>
 Importantly, from this demangled name, we see the type of the input parameter (the second.)
 It is <literal><![CDATA[Rcpp::Vector<14, Rcpp::PreserveStorage>]]></literal>.
-The 14 is the <c:type>SEXPTYPE</c:type> and this corresponds to <c:define>REALSXP</c:define>.
+The 14 is the <c:type>SEXPTYPE</c:type> and this corresponds to <cpre:define>REALSXP</cpre:define>.
 This tells us the expected input type is a numeric vector.
 We also see the object is constant, i.e., its contents are not changed.
 </para>
