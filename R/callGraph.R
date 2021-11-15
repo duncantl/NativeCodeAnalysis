@@ -1,6 +1,8 @@
 
 # Routine call graph via LLVM
 
+##  use mkCallsGraph() in Rllvm. Much faster (x 200).  Uses LLVM's CallGraph class.
+
 
 setGeneric("getCalledRoutines",
            function(x, ...)
@@ -23,7 +25,7 @@ setMethod("getCalledRoutines", "BasicBlock",
           })
 
 
-setMethod("getCalledRoutines", "CallInst",
+setMethod("getCalledRoutines", "CallBase", # CallInst",
           function(x, ...) {
               getName(getCalledFunction(x))
           })
@@ -37,9 +39,16 @@ setMethod("getCalledRoutines", "MemSetInst",
           function(x, ...) {
               character()
           })
+setMethod("getCalledRoutines", "MemCpyInst",
+          function(x, ...) {
+              character()
+          })
+setMethod("getCalledRoutines", "MemMoveInst",
+          function(x, ...) {
+              character()
+          })
               
 
-library(igraph)
 
 setGeneric("callGraph",
            function(x, adjacency = FALSE, ...)
@@ -60,7 +69,7 @@ setMethod("callGraph", "character",
               info = file.info(e)
               pdir = info$isdir
               if(any(pdir)) {
-                  tmp = unlist(lapply(x[pdir], list.files, pattern = patter, full.names = TRUE))
+                  tmp = unlist(lapply(x[pdir], list.files, pattern = pattern, full.names = TRUE))
                   x = c(x[!pdir], tmp)
               }
               
