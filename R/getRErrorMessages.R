@@ -20,9 +20,14 @@ setMethod("getRErrorMessages", "Instruction",
 
 setMethod("getRErrorMessages", "CallBase",
           function(x, ...) {
-              ok = getName(getCalledFunction(x)) %in% c("Rf_error", "Rf_errorcall")
+              fn = getName(getCalledFunction(x)) 
+              ok = fn %in% c("Rf_error", "Rf_errorcall")
               if(!ok)
                   return(character())
 
-              getValue(x[[1]][[1]])
+              idx = 1L
+              if(fn == "Rf_errorcall")
+                  idx = 2L
+              
+              getValue(x[[idx]][[1]])
           })
