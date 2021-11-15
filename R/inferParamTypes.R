@@ -110,7 +110,11 @@ function(p, users = getAllUsers(p)) # , direct = FALSE))
 
         if(length(u2) == 0) {
             # so it appears it is never used.
-            return(findUseOfInOtherRoutines(p, users))
+            # So we think that it may be stored somewhere which is passed to another routine
+            # and this R object is used there.
+            w = sapply(users, function(u) is(u, "StoreInst") && identical(p, u[[1]]))
+            if(any(w)) 
+               return(unlist(lapply(users[w], function(u) findUseOfInOtherRoutines( u[[2]] )), recursive = FALSE))
         }
 
         

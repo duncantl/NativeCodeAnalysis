@@ -17,20 +17,6 @@
 #
 
 
-findCallsPassingAsArg =
-    #
-    # for now, only matches val but could be passing by value or reference.
-    # clang should switch the by value to by reference.
-    #
-function(val, users = getAllUsers(val))
-{
-    if(!length(users))
-        return(list())
-
-    passesArg = sapply(users, function(k) is(k, "CallInst") && any(sapply(getOperands(k), identical, ctx)))
-    users[passesArg]
-}
-
 findUseOfInOtherRoutines =
     #
     # This takes the GetElementPtrInst that is the reference to the struct and the operands to get the field.
@@ -39,6 +25,11 @@ findUseOfInOtherRoutines =
     #
 function(val, mod = as(val, "Module"))
 {
+
+#   if(is(val, "Argument")) {
+#      u = getAllUsers(val)
+#   }
+    
     struct = val[[1]]
     indices = sapply(getOperands(val)[-1], as, "integer")
     calls = findCallsPassingAsArg(struct)
@@ -72,18 +63,22 @@ function(val, indices, users = getAllUsers(val))
     if(!any(w))
         return(list())
 
-  browser()
     ans = lapply(users[w], inferParamType)
 }
 
 
+findCallsPassingAsArg =
+    #
+    # for now, only matches val but could be passing by value or reference.
+    # clang should switch the by value to by reference.
+    #
+function(val, users = getAllUsers(val))
+{
+    if(!length(users))
+        return(list())
 
-if(FALSE)
-w = sapply(users, function(x)
-                  is(x, "GetElementPtrInst") && identical(x[[1]], pctx) &&
-                  length(x) == 3 &&
-                  all(sapply(getOperands(x)[2:3],
-                 	      function(x)
-		              if(is(x, "ConstantInt"))
-    			          as(x, "integer")
-			       else -1) == gepIndices))
+    passesArg = sapply(users, function(k) is(k, "CallInst") && any(sapply(getOperands(k), identical, ctx)))
+    users[passesArg]
+}
+
+
