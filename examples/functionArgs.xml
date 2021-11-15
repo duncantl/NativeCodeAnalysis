@@ -1,0 +1,269 @@
+<section
+	 xmlns:c="http://www.C.org"
+	 xmlns:r="http://www.r-project.org">
+<title>Use of Functions as Arguments in <r:func>.Call</r:func> <c/> Routines</title>
+
+<para>
+Nick identified the routine do_nsga2 in the   <r:pkg>mco</r:pkg>
+<r:code>
+m = parseIR("~/CRAN2/Pkgs3/mco/src/nsga2.ir")
+</r:code>
+
+<section>
+<title><c:arg>s_function</c:arg></title>
+<para>
+
+<r:code>
+f = m$do_nsga2  
+params = getParameters(f)
+u = getAllUsers(params[[1]])
+</r:code>
+There are two users <emdash/> a call to <c:func>Rf_isFunction</c:func>
+and <c:func>Rf_lang2</c:func>.
+The first is the test in an assertion that raises an error if the object is not a function.
+</para>
+
+<para>
+  We can  go further than determining the argument must be a function.
+  We can determine how may arguments it is called with and possibly what their types
+  are.
+<r:code>
+u2 = getAllUsers(u[[2]])
+<r:output><![CDATA[
+[[1]]
+[1] "  store %struct.SEXPREC.0* %call50, %struct.SEXPREC.0** %function_call, align 8, !dbg !177, !tbaa !179"
+
+[[2]]
+[1] "  %call51 = tail call %struct.SEXPREC.0* @Rf_protect(%struct.SEXPREC.0* %call50) #9, !dbg !177"
+]]></r:output>
+</r:code>
+The second is an uninteresting call to <c:func>Rf_protect</c:func>.
+The first assigns the result of <c:func>Rf_lang2</c:func>
+and the location is ctx.function_call.
+Tthe call appears not to be used within this routine, but is probably used in another routine
+called by this do_nsga2. We can search for the routines
+that do_nsga2 calls that pass the ctx structure and find which ones
+access the <c:el>function_call</c:el> entry.
+</para>
+
+<para>
+  
+<r:code>
+intersect(getDefinedRoutines(m), getCalledRoutines(f))
+<r:output><![CDATA[
+ [1] "check_dominance"               "merge"                        
+ [3] "copy_ind"                      "population_alloc"             
+ [5] "evaluate_pop"                  "insert"                       
+ [7] "del"                           "assign_crowding_distance_list"
+ [9] "assign_crowding_distance"      "rnd"                          
+[11] "tournament"                    "crossover"                    
+[13] "q_sort_dist"                  
+]]></r:output>
+</r:code>
+There may be routines defined in other modules in the package.
+However, the structure is actually defined locally within this nsga2.c file.
+Therefore it can't be (properly) used outside of this file.
+</para>
+<para>
+Which of these routines is called with the ctx?
+We first get the <c:var>ctx</c:var> value via
+<r:code>
+ctx = u2[[1]][[2]][[1]]
+</r:code>
+Next, we find all the Call instructions in the do_nsga2 routine
+<r:code>
+ins = getInstructions(f)
+w = sapply(ins, is, "CallInst")  
+calls = ins[w]
+passesCtx = sapply(calls, function(k) any(sapply(getOperands(k), identical, ctx)))
+unname(sapply(calls[passesCtx], getCallName))
+</r:code>
+Actually, better way to do this is getAllUsers(ctx) and then find which are CallInst that also have ctx as an
+operand. See findCallsPassingAsArg.
+</para>
+
+
+<para>
+  We'll skip ahead and manually identify that evaluate_pop is the one routine
+  that accesses the function_call field.
+<r:code>
+p = getParameters(m$evaluate_pop)
+pctx = p [[ which(sapply(p,  function(x) sameType(getType(x), getType(ctx)))) ]]
+</r:code>
+
+To know the operands to access the function_call, we can get them from
+the store instruction in which it was assigned:
+<r:code>
+ops = sapply(u2[[1]][[2]][2:3], as, "integer")
+</r:code>
+
+So now we are looking for GEP instructions which 
+<r:code>
+u3 = getAllUsers(pctx)
+w = sapply(u3, function(x)
+                  is(x, "GetElementPtrInst") && identical(x[[1]], pctx) &&
+                  length(x) == 3 &&
+                  all(sapply(getOperands(x)[2:3],
+                 	      function(x)
+		              if(is(x, "ConstantInt"))
+    			          as(x, "integer")
+			       else -1) == ops))
+which(w) # 1
+</r:code>
+So it is the first one.
+</para>
+<para>
+<r:code>
+u4 = getAllUsers(u3[[1]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %0 = load %struct.SEXPREC.0*, %struct.SEXPREC.0** %function_call, align 8, !dbg !90, !tbaa !91"
+
+]]></r:output>
+</r:code>
+There is one user of this, loading it. So we want the users of this value.
+<r:code>
+u5 = getAllUsers(u4[[1]])
+[[1]]
+[1] "  %call4 = tail call %struct.SEXPREC.0* @SETCADR(%struct.SEXPREC.0* %0, %struct.SEXPREC.0* %call) #9, !dbg !105"
+
+[[2]]
+[1] "  %call22 = tail call %struct.SEXPREC.0* @Rf_eval(%struct.SEXPREC.0* %0, %struct.SEXPREC.0* %52) #9, !dbg !149"
+</r:code>
+This is where we see that the routine inserts the first and only argument
+and then evaluates the call.
+The argument is
+<r:code>
+u5[[1]][[2]]
+<r:output><![CDATA[
+[1] "  %call = tail call %struct.SEXPREC.0* @Rf_allocMatrix(i32 14, i32 %conv, i32 %conv1) #9, !dbg !100"
+]]></r:output>
+</r:code>
+This is creates a numeric (14) matrix.
+The number of rows is
+<r:code>
+u5[[1]][[2]][[2]][[1]][[1]]
+<r:output><![CDATA[
+[1] "  %size = getelementptr inbounds %struct.population, %struct.population* %pop, i64 0, i32 0, !dbg !100"
+]]></r:output>
+</r:code>
+This is the first/size field in the <c:struct>population</c:struct> structure passed as the second argument in the call
+to evaluate_pop.
+The number of columns is
+<r:code>
+u5[[1]][[2]][[3]][[1]][[1]]  # following the casts and loads  
+<r:output><![CDATA[
+[1] "  %input_dim = getelementptr inbounds %struct.nsga2_ctx, %struct.nsga2_ctx* %ctx, i64 0, i32 0, !dbg !100"
+]]></r:output>
+</r:code>
+This is the input_dim (first element) of the <c:var>ctx</c:var> variable.
+</para>
+
+</section>
+
+<section>
+<title><c:arg>s_constraint</c:arg></title>
+
+<para>
+  The parameter <c:arg>s_constraint</c:arg>
+  is also expected to be a function and the routine
+  raises an error if not.
+<r:code>
+p = getParameters(f)$s_constraint
+u = getAllUsers(p)
+</r:code>
+Again, this is immediately inserted into a language object and we follow that:
+<r:code>
+u2 = getAllUsers(u[[2]])
+store = u2[[1]][[2]] # where it is stored - ctx.constrain_call.
+getAllUsers(store)
+</r:code>
+So this is not used directly in the routine.
+Like s_function, it is probably called in one of the other routines to which ctx is passed.
+We found these calls in do_nsga2 previously, so we can look at those again:
+<r:code>
+lctxfuns = unique(unname(sapply(calls[passesCtx], getCallName)))
+</r:code>
+</para>
+
+<para>
+Again, having searched the other routines, we find constrain_call is only used in evaluate_pop.
+We compute the indices into the struct for constraint_call
+<r:code>
+gepIndices = sapply(getOperands(store)[2:3], as, "integer")
+</r:code>
+so that we have these to find where this field is used in the evaluate_pop routine.
+<r:code>
+up = getAllUsers(pctx)
+w = sapply(up, function(x)
+                  is(x, "GetElementPtrInst") && identical(x[[1]], pctx) &&
+                  length(x) == 3 &&
+                  all(sapply(getOperands(x)[2:3],
+                 	      function(x)
+		              if(is(x, "ConstantInt"))
+    			          as(x, "integer")
+			       else -1) == gepIndices))
+field = up[[which(w) ]]
+</r:code>
+<r:code>
+up2 = getAllUsers(field)
+</r:code>
+This is a load, so we follow that:
+<r:code>
+up3 = getAllUsers(up2[[1]])
+</r:code>
+This is, as for function_call, a call to SETCAR and a call to Rf_eval.
+The argument for the function is
+<r:code>
+up3[[1]][[2]]
+</r:code>
+And this is again another numeric matrix and with the same dimensions.
+In fact, if we look at is uses, we see
+<r:code>
+getAllUsers(up3[[1]][[2]])
+<r:output><![CDATA[
+[[1]]
+[1] "  %call2 = tail call %struct.SEXPREC.0* @Rf_protect(%struct.SEXPREC.0* %call) #9, !dbg !100"
+
+[[2]]
+[1] "  %call3 = tail call double* @REAL(%struct.SEXPREC.0* %call) #9, !dbg !104"
+
+[[3]]
+[1] "  %call4 = tail call %struct.SEXPREC.0* @SETCADR(%struct.SEXPREC.0* %0, %struct.SEXPREC.0* %call) #9, !dbg !105"
+
+[[4]]
+[1] "  %call6 = tail call %struct.SEXPREC.0* @SETCADR(%struct.SEXPREC.0* %1, %struct.SEXPREC.0* %call) #9, !dbg !111"
+]]></r:output>
+</r:code>
+What this means is that this same Value is used in two calls to SETCAR for two different language objects. These are the
+function_call and the constrain_call. So it is the same <r/> object in both language objects and calls.
+</para>
+
+</section>
+
+
+<section>
+<title><c:var>s_env</c:var></title>
+
+<para>
+  This is not about an R function as a parameter but related
+  and also in the do_nsga2 routine.
+  Consider the s_env parameter.
+  There is no test for the type of this parameter.
+  It is assigned to ctx.environment and then never used again.
+  Of course, ctx.environment is used, but not directly.
+  It  is used in evaluate_pop when call Rf_eval() for the function_call and constraint_call.
+  So to determine its type, we have to find where ctx.environment is used.
+</para>
+<para>
+  From above, we have the routines called by do_nsga2 that pass ctx - by address.
+<r:code>
+ctx = u[[1]][[2]][[1]]
+  
+</r:code>  
+  
+
+</para>
+</section>
+
+</section>

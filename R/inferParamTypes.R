@@ -17,9 +17,17 @@ inferParamType =
     # TODO:  Integrate the testType() and findSEXPTypesFromSwitch() to determine 
     # the types of the parameters with these additional guides.
     #
-function(p)
+    # Check for us in isFunction(), etc. and see if within a condition that branches to
+    #  an error.  See testType.R.  e.g. testParamType(p) returns a list of function names
+    #  which identify the test predicate
+    #
+    # Break function into smaller units
+    #
+    #
+    #
+function(p, users = getAllUsers(p)) # , direct = FALSE))
 {
-    users = getAllUsers(p)
+
     k = sapply(users, getCallName)
     k = k[!is.na(k)]  # will get NA from getCallName for a ReturnInst, i.e., when returning the parameter.
     ku = unique(k)
@@ -50,7 +58,7 @@ function(p)
         return(ans)
     
 
-    if(all(ku %in% c("EXTPTR_PTR", "R_ExternalPtrAddr")))
+    if(length(ku) && all(ku %in% c("EXTPTR_PTR", "R_ExternalPtrAddr")))
         return(structure(list(type = "ExternalPtr"), class = "RExternalPtrType"))
 
 
@@ -81,7 +89,8 @@ function(p)
         return(structure(list(type = "externalptr"), class = "RExternalPtr"))
 
 
-    isEnv = isUsedAsEnv(p, users, k)
+
+    isEnv = isUsedAsEnv(p) # do we pass  users, k)
     if(all(isEnv) && (length(typeof) == 0 || "environment" %in% typeof))
         return(structure(list(type = "environment"), class = "REnvironment"))
 
@@ -98,6 +107,13 @@ function(p)
          # avoid any circularity of finding the initial store.
         w = u2 %in% users
         u2 = u2[!w]
+
+        if(length(u2) == 0) {
+            # so it appears it is never used.
+            return(findUseOfInOtherRoutines(p, users))
+        }
+
+        
          # Now find where those variables were load and then where they were
          # used.
         w = sapply(u2, is, "LoadInst")
@@ -162,11 +178,12 @@ getTypeOf =
     #    switch(TYPEOF(param)) { case INTSXP  ;  case REALSXP ; .....}
     #
     #
-function(p, users = getAllUsers(p), k = sapply(users, getCallName))
+function(p, users = getAllUsers(p), #direct = TRUE),
+             k = sapply(users, getCallName))
 {
     if(!all(is.na(k)) && "TYPEOF" %in% k) {
            # Was getAllUsers(users[ k == "TYPEOF" ] ) but that doesn't make sense as it is a list, not a single Value.
-        tyu = unlist(lapply(users[ !is.na(k) & k == "TYPEOF" ], getAllUsers)) 
+        tyu = unlist(lapply(users[ !is.na(k) & k == "TYPEOF" ], getAllUsers)) # , direct = TRUE)) 
                # Looks flaky!
         w = lapply(tyu, function(x)
                             if(is(x, "ICmpInst")) {
@@ -190,13 +207,23 @@ function(p, users = getAllUsers(p), k = sapply(users, getCallName))
 
 isUsedAsEnv =
     # Should this be isUsedOnlyAsEnv
-function(p, users = getAllUsers(p), k = sapply(users, getCallName))
+    # Need the direct = TRUE.
+function(p, users = getAllUsers(p, direct = TRUE),
+         k = sapply(users, getCallName))
 {
     # R routines that have a parameter that is an environment.  Name -> parameter number
     envirParamMap = c("Rf_defineVar" = 3L, Rf_findVar = 2L, Rf_findVarInFrame3 = 1L, findVarLocInFrame = 1L,
-                         findVarInFrame = 1L)
+        findVarInFrame = 1L,
+        "Rf_eval" = 2L, R_tryEval = 2L, R_tryEvalSilent = 2L, R_ParseEvalString = 2L, R_forceAndCall = 3L)
+    
     m = match(k, names(envirParamMap))
-    any(mapply( function(call, idx)
-                  identical(call[[3]], p),
-               users[!is.na(m)], envirParamMap[!is.na(m)]))
+
+    any(mapply( function(call, idx) {
+                     v = call[[idx]]
+                     if(is(v, "LoadInst"))
+                         v = v[[1]]
+                     identical(v, p)
+                 }, users[!is.na(m)], envirParamMap[m[!is.na(m)]]))
 }
+
+

@@ -11,6 +11,9 @@ function(ins)
 unravel =
 function(x)
 {
+    if(is.list(x))
+        return(lapply(x, unravel))
+    
     if(is(x, "CastInst"))
         x = x[[1]]
 
@@ -35,4 +38,20 @@ function(ty)
         return(FALSE)
 
     TRUE
+}
+
+
+getAllUsers =
+function(x, direct = FALSE)
+{
+    if(is.list(x))
+        return(unlist(lapply(x, getAllUsers, direct = direct)))
+
+    ans = Rllvm::getAllUsers(x)
+    if(direct) {
+
+       ans = unlist( lapply(ans, function(x) if(is(x, "LoadInst")) getAllUsers(x, direct = TRUE) else x) )
+    }
+
+    ans
 }
