@@ -105,10 +105,15 @@ getElementTypes =
     # and what types those values being inserted are.
 function(x, module, uses = getAllUsers(x))
 {
-    w = sapply(uses, function(x) is(x, "CallInst") && getCallName(x) == "SET_VECTOR_ELT")
+    w = sapply(uses, function(u)
+                         is(u, "CallInst") && getCallName(u) == "SET_VECTOR_ELT" &&
+                          # ignore where x is used as a value not the object into which a
+                          # value is being inserted, e.g. SET_VECTOR_ELT(other, , x)       
+                           identical(u[[1]], x))
     sets = uses[w]
+
     ans = lapply(sets, function(x) pAllocVector(x[[3]], module))
-#    browser()    
+
     idx = sapply(sets, function(x) asIndex(x[[2]]))  # Handle symbolic values SET_VECTOR_ELT(x, i++, value).  if() statements.
     if(is(idx, "numeric"))
        ans = ans[order(idx)]
@@ -170,7 +175,7 @@ function(x)
 {
     val = x[[1]]
     idx = 0
- browser()    
+# browser()    
 
     if(is(val, "CallInst")) {
         if(getCallName(val) %in% c("INTEGER", "LOGICAL", "REAL"))
