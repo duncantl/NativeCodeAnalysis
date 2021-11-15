@@ -23,12 +23,12 @@ findUseOfInOtherRoutines =
     # So this would be
     #   u = getAllUsers(params$s_env)[[1]][[2]]
     #
-function(val, mod = as(val, "Module"))
+function(val)
 {
-
-#   if(is(val, "Argument")) {
-#      u = getAllUsers(val)
-#   }
+    #   if(is(val, "Argument")) {
+    # See inferParamType when there appears to be no uses of the parameter.
+    #      u = getAllUsers(val)
+    #  }
     
     struct = val[[1]]
     indices = sapply(getOperands(val)[-1], as, "integer")
@@ -36,7 +36,7 @@ function(val, mod = as(val, "Module"))
     # Do we need to examine each call or just the unique routines.
     # It is possible that struct could be passed in different arguments and used differently,
     # e.g.  foo(struct *x, struct *y) and foo(ctx, NULL) and foo(NULL, ctx)  (where ctx is the instance of struct)
-    ans = lapply(calls, findUseInRoutine, struct, indices, mod)
+    ans = lapply(calls, findUseInRoutine, struct, indices)
     ans[sapply(ans, length) > 0]
 }
 
@@ -47,8 +47,7 @@ findUseInRoutine =
     #
     # Don't need mod ?
     #
-function(call, arg, indices, mod = as(arg, "Module"),
-         fun = getCalledFunction(call))
+function(call, arg, indices, fun = getCalledFunction(call))
 {
     argNum = which(sapply(getOperands(call), identical, arg))
     fun = getCalledFunction(call)    
