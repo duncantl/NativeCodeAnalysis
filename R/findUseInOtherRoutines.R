@@ -16,6 +16,22 @@
 #
 #
 
+if(FALSE) {
+    m = parseIR("~/CRAN2/Pkgs3/mco/src/nsga2.ir")
+    f = m$do_nsga2
+    params = getParameters(f)
+    u = getAllUsers(params$s_env)
+    findUseOfInOtherRoutines(u[[1]][[2]])
+
+    u = getAllUsers(params$s_function)
+    fnp = getAllUsers(u[[2]])[[1]][[2]]
+    findUseOfInOtherRoutines(fnp, infer = FALSE)
+
+    u = getAllUsers(params$s_constraint)
+    fnp = getAllUsers(u[[2]])[[1]][[2]]
+    findUseOfInOtherRoutines(fnp, infer = FALSE)    
+}
+
 
 findUseOfInOtherRoutines =
     #
@@ -23,7 +39,13 @@ findUseOfInOtherRoutines =
     # So this would be
     #   u = getAllUsers(params$s_env)[[1]][[2]]
     #
-function(val)
+    #
+    #
+    #
+    #
+    #
+    #
+function(val, ...)
 {
     #   if(is(val, "Argument")) {
     # See inferParamType when there appears to be no uses of the parameter.
@@ -36,33 +58,37 @@ function(val)
     # Do we need to examine each call or just the unique routines.
     # It is possible that struct could be passed in different arguments and used differently,
     # e.g.  foo(struct *x, struct *y) and foo(ctx, NULL) and foo(NULL, ctx)  (where ctx is the instance of struct)
-    ans = lapply(calls, findUseInRoutine, struct, indices)
+    ans = lapply(calls, findUseInRoutine, struct, indices, ...)
     ans[sapply(ans, length) > 0]
 }
+
+
+
 
 findUseInRoutine =
     #
     #  arg is the address of the struct
     #  indices are the operands to the field in arg
     #
-    # Don't need mod ?
-    #
-function(call, arg, indices, fun = getCalledFunction(call))
+function(call, arg, indices, fun = getCalledFunction(call), ...)
 {
     argNum = which(sapply(getOperands(call), identical, arg))
     fun = getCalledFunction(call)    
     param = getParameters(fun)[[argNum]]
-    findUseOfField(param, indices)
+    findUseOfField(param, indices, ...)
 }
 
 findUseOfField =
-function(val, indices, users = getAllUsers(val))
+function(val, indices, users = getAllUsers(val), infer = TRUE)
 {
     w = sapply(users, function(x) is(x, "GetElementPtrInst") && identical(x[[1]], val) && length(ops <- getOperands(x)) == length(indices) + 1L && all(sapply(ops[-1], as, "integer") == indices))
     if(!any(w))
         return(list())
 
-    ans = lapply(users[w], inferParamType)
+    if(infer)
+        lapply(users[w], inferParamType)
+    else
+        getAllUsers(users[w], direct = TRUE)
 }
 
 
