@@ -15,6 +15,12 @@ S4SXP = "S4", NEWSXP = "NEW", FREESXP = "FREE", FUNSXP = "FUN"), stringsAsFactor
 getRType =
 function(val, sexpTypes = RSEXPTypeValues.df)
 {
+    if(!is(val, "numeric")) {
+        return(switch(class(val),
+                      Argument = val,
+                      val))
+    }
+    
     i = match(val, sexpTypes[[1]])
     structure(sexpTypes$rtypeName[i], names = rownames(sexpTypes)[i])
 }
