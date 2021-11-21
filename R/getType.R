@@ -546,6 +546,7 @@ tmp <- function(x, var = NULL, .done = list(), ...)
 setMethod("getCallType", "CallInst",   tmp)        
 setMethod("getCallType", "InvokeInst", tmp)
 
+
 ###############
 
 getCharVectorEls =
@@ -556,7 +557,6 @@ getCharVectorEls =
     #  m = parseIR("tests/classes.ir")
     #  z = getBlocks(m$mk2)[[1]][[5]]
     #  getCharVectorEls(z)
-    #
     #
 function(x)    
 {
@@ -824,7 +824,7 @@ function(val, rtype = FALSE, .done = list(), ...) {
              if(fn == "Rf_coerceVector") {
                  ans = findValue0(val[[1]], .rtype, .done, ...)
                  if(is.null(ans)) ans = list()                 
-                 return(structure(list(obj = ans, to = getRType(findValue0(val[[2]], .done = .done))), class = c(ans, "Coerce" )))
+                 return(structure(list(obj = ans, to = getRType(findValue0(val[[2]], .done = .done))), class = c(class(ans), "Coerce" )))
              }
 
              if(fn == "getListElement") {
@@ -1169,3 +1169,35 @@ setMethod("resolveFunction", "GetElementPtrInst",
                NULL
            })
 
+
+
+
+
+
+# find . -name '*.c' -exec grep -l MAKE_CLASS {} \;
+# ./arulesSequences/src/similarity.c
+# ./arulesSequences/src/matrix.c
+# ./excel.link/src/RUtils.c
+# ./sp/inst/include/sp_xports.c
+# ./sp/src/sp_xports.c
+# ./tuneR/src/readmp3.c
+# ./party/src/Utils.c
+# ./RCurl/src/curl.c
+# ./arules/src/newS4object.c
+# ./float.old/src/scale.c
+# ./XML/src/xpath.c
+# ./XML/src/Utils.c
+# ./Rmpfr/src/convert.c
+# ./zoo/src/lag.c
+# ./redland/src/redland.c
+# ./float/src/scale.c
+# ./rgeos/src/rgeos_geos2R.c
+# ./rJava/src/Rglue.c
+# ./rJava/src/rJava.c
+# ./geostatsp/src/matern.c
+# ./topicmodels/src/rlda.c
+# ./topicmodels/src/rctm.c
+# ./SearchTrees/src/quadtree2.c
+# ./Matrix/src/Mutils.c
+# ./rmatio/src/rmatio.c
+# ./splusTimeDate/src/timeObj.c
