@@ -17,7 +17,7 @@ inferParamType =
     # TODO:  Integrate the testType() and findSEXPTypesFromSwitch() to determine 
     # the types of the parameters with these additional guides.
     #
-    # Check for us in isFunction(), etc. and see if within a condition that branches to
+    # Check for use in isFunction(), etc. and see if within a condition that branches to
     #  an error.  See testType.R.  e.g. testParamType(p) returns a list of function names
     #  which identify the test predicate
     #
@@ -27,7 +27,6 @@ inferParamType =
     #
 function(p, users = getAllUsers(p)) # , direct = FALSE))
 {
-
     k = sapply(users, getCallName)
     k = k[!is.na(k)]  # will get NA from getCallName for a ReturnInst, i.e., when returning the parameter.
     ku = unique(k)
@@ -56,7 +55,6 @@ function(p, users = getAllUsers(p)) # , direct = FALSE))
 
     if(!is.null(ans))
         return(ans)
-    
 
     if(length(ku) && all(ku %in% c("EXTPTR_PTR", "R_ExternalPtrAddr")))
         return(structure(list(type = "ExternalPtr"), class = "RExternalPtrType"))
@@ -137,6 +135,13 @@ function(p, users = getAllUsers(p)) # , direct = FALSE))
         
     }
 
+
+    tst = testParamType(p)
+    if(!is.null(tst)) {
+        # Need to check if raises an error if not one of these types.
+        # Need to package the information as types not names of routines.
+        return(tst)
+    }
 
     if(length(typeof))
         return(structure(list(type = typeof)))
