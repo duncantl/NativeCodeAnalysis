@@ -1,4 +1,3 @@
-
 # Need to think this through more.
 #  Call it getIRCalls ?
 # Want to get the external calls. But can do this by getting all the calls
@@ -12,8 +11,8 @@ setGeneric("getCalls", function(x, ...) standardGeneric("getCalls"))
 
 setMethod("getCalls", "Module",
           function(x, names = TRUE, ...) {
-              r = getDefinedRoutines(module = x, names = FALSE)
-              ins = unlist(lapply(r, getCalls, names, ...))
+              r = getDefinedRoutines(x, names = FALSE)
+              unlist(lapply(r, getCalls, names, ...))
           })
 
 setMethod("getCalls", "Function",
