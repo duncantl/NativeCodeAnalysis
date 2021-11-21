@@ -1,3 +1,22 @@
+setMethod("getValue", "StoreInst",
+          function(x, ...)
+             x[[1]]
+          )
+
+getValue.NoLoadInst =
+function(x, ...) {
+             u = getAllUsers(x)
+             u = u[!sapply(u, is, "LoadInst")]
+             u = lapply(u, getValue)
+             if(length(u) == 1)
+                u = u[[1]]
+             u
+         }
+
+setMethod("getValue", "LoadInst", function(x, ...) getValue.NoLoadInst(x[[1]], ...))
+setMethod("getValue", "AllocaInst", getValue.NoLoadInst)
+
+
 
 getRReturnTypes =
 function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = character())
@@ -24,33 +43,86 @@ function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = ch
 
     
     if(length(ret) > 1)
-        warning("more than one return value!")
+        warning("more than one return value. Processing first one!")
 
     ret = ret[[1]]
-    pAllocVector(ret, module, stack = stack)    
+    # What about getCallType(), compReturnType()
+    tmp = pAllocVector(ret, module, stack = stack)
+    tmp[ ! sapply(tmp, is.null) ]
 }
 
 
-pAllocVector =
-function(x, module, stack = character()) 
+followAllPhis =
+    #
+    # given a PHI node, typically the return value of a routine,
+    # recursively/iteratively follow all the values  and unravel the phi nodes.
+    #
+function(x)
 {
-    if(is(x, "PHINode"))
-        return(lapply(x[], pAllocVector, module = module, stack = stack))
+    ans = x[]
+    while(any(  w <- sapply(ans, is, "PHINode") )) {
+        ans = c(ans, unlist(lapply(ans[w],`[`)))
+        ans = ans[ - which(w) ]
+        ans = unique(ans)
+    }
+
+    ans
+}
+
+pAllocVector =
+    #
+    # How does this relate to getCallType() and compReturnType()
+    #
+function(x, module, stack = character(), prev = list()) 
+{
+    if(any(sapply(prev, identical, x)))
+        return(NULL)
+
+    prev = c(prev, x)
+        
+    if(is(x, "PHINode")) {
+        # "unravel" this phi and all the nodes it points to get rid of the PHI nodes
+        # and end up with the unique Value objects that are not PHI nodes.
+        v = followAllPhis(x)
+        return(lapply(v, pAllocVector, module, stack))
+#        return(lapply(unique(x[]), pAllocVector, module = module, stack = stack, prev = prev))
+    }
 
     
     if(is(x, "CallInst")) {
         fname = getName(getCalledFunction(x))
-        if(fname %in% c("Rf_allocVector3", "Rf_allocVector")) {
-            ans = structure(list(type = getRType(getValue(x[[1]])), length = mkLength(x[[2]])), class = "RVectorType")
-            if(ans$type == "list") 
+        if(fname == "Rf_protect")
+            return(pAllocVector(x[[1]], module, stack, prev))
+
+        if(fname == "Rf_coerceVector") {
+            sexpty = x[[2]]
+            if(!is(sexpty, "Argument"))
+                sexpty = getRType(getValue(sexpty))
+            ans = structure(list(type = sexpty, length = NA, class = "RVectorType"))
+            return(ans)
+        } else if(fname %in% c("Rf_allocVector3", "Rf_allocVector")) {
+            sexpty = x[[1]]  
+            # If the type is an argument, then we cannot determine the R type
+            # except for via calls to this routine.
+            if(!is(sexpty, "Argument"))
+                sexpty = getRType(getValue(sexpty))
+
+            # if the first argument is TYPEOF(arg), want to capture that symbollically.
+            ans = structure(list(type = sexpty, length = mkLength(x[[2]])), class = "RVectorType")
+            if(is.character(ans$type) && ans$type == "list") 
                 ans$elTypes = getElementTypes(x, module)
 
             return(ans)
         }
 
         if(fname %in% c("Rf_allocMatrix")) {
+            #[check] need to make this smarter. If it is not a literal value
+            # we need to figure out what the value might be, e.g., a parameter
+            # a computation such as TYPEOF(otherObj)
+            # e.g. do_readDCF in dcf.c
+            elTy = getRType(getValue(x[[1]]))
             ans = structure(list(type = "Matrix",
-                                 elType = getRType(getValue(x[[1]])),
+                                 elType = elTy,
                                  dim = lapply(x[2:3], mkLength)),
                             class = "RMatrixType")
             return(ans)
@@ -65,18 +137,24 @@ function(x, module, stack = character())
             return(structure(list(type = ty, length = 1), class = c('RScalarType', 'RVectorType')))
         }
         
-        if(fname %in% names(module) && length(getBlocks(f2 <- module[[fname]]))) 
-            return(getRReturnTypes(f2, module = module, stack = stack))
-        else
+        if(fname %in% names(module) && length(getBlocks(f2 <- module[[fname]]))) {
+            # analyze the function, but then see if the call provides additional information.
+            ans = getRReturnTypes(f2, module = module, stack = stack)
+            ans = mergeCallWithReturnTypes(ans, x)
+            return(ans)
+        } else {
+            print(x)
+#            browser()
             return(x)
+        }
     } else if(is(x, "LoadInst"))
-        return(pAllocVector(x[[1]], module, stack))
+        return(pAllocVector(x[[1]], module, stack, prev))
     else if(is(x, "AllocaInst")) {
         u = getAllUsers(x)
         u = u[!sapply(u, isLoadReturn)]
-        lapply(u, pAllocVector, module)
+        lapply(u, pAllocVector, module, stack, prev)
     } else if(is(x, "StoreInst"))
-        pAllocVector(x[[1]], module)
+        pAllocVector(x[[1]], module, stack, prev)
     else if(is(x, "CastInst"))
         x[[1]] # pAllocVector(x[[1]], module)
     else if(is(x, "GlobalVariable")) {
@@ -89,6 +167,63 @@ function(x, module, stack = character())
     else
         x
 }                
+
+
+mergeCallWithReturnTypes =
+    #
+    # Needs to handle case when arguments in call are not simple values
+    # passed by the caller to the routine, but computations that are passed
+    #
+    # ans is the list of possible return value types from the routine being called in call
+    # call is the specific call to the routine, so provides information.
+    #
+    # example that needs to be handled:
+    # m2 = parseIR("NativeCodeAnalysis/examples/argType.ir")
+    # getRReturnTypes(m2$bar)
+    #
+    # Works
+    # m = parseIR("~/R-devel/build/src/library/stats/src/random.ir")
+    # z = getRReturnTypes(m$do_rbinom)
+    #
+function(ans, call)
+{
+    test = function(x) (is(x, 'RVectorType') && is(x$type, "Argument")) ||
+                         (is(x, 'RMatrixType') && is(x$elType, "Argument"))
+    
+    if(unl <- test(ans)) {
+        ans = list(ans)
+        w = TRUE
+    } else 
+        w = sapply(ans, test)
+    if(any(w)) 
+        ans[w] = lapply(ans[w], substituteArgInType, call)
+
+    if(unl)
+        ans = ans[[1]]
+    ans
+}
+
+substituteArgInType =
+function(type, call)
+{
+    el = if(is(type, "RVectorType")) "type" else "elType"
+    i = paramIndex(type[[el]])
+    v = call[[i]]
+    # Could be a literal value or a computation, e.g.,
+    # TYPEOF(x).
+    # If TYPEOF(x), then want to represent this symbolically and determine what x
+    # is a local variable or a parameter.
+    tmp = findValue(v)
+    if(!is.null(tmp))
+       type[[el]] = tmp
+    type
+}
+
+paramIndex =
+function(p, fun = getParent(p), params = getParameters(fun))
+{
+   which( sapply(params, identical, p) )
+}
 
 
 isLoadReturn =
@@ -139,6 +274,7 @@ mkLength =
     #
 function(x)
 {
+    browser()
     x = unravel(x)
 
     if(is(x, "CallInst")) {
@@ -166,7 +302,7 @@ function(x)
         getElementOf(x)
    
     } else
-        x
+        getValue(x)
 }
 
 
