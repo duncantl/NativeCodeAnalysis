@@ -46,8 +46,31 @@ function(fun, params = getParameters(fun))
 }
 
 
+
+
+
+# R 4.2.0 development.   Built: 10/20/2021  SVN Rev: 81081
+# R Under development (unstable) (2021-10-20 r81081)
+Rf_IsRoutines =
+c("Rf_isArray", "Rf_isBasicClass", "Rf_isBlankString", "Rf_isComplex", 
+"Rf_isEnvironment", "Rf_isExpression", "Rf_isFactor", "Rf_isFrame", 
+"Rf_isFree", "Rf_isFunction", "Rf_isInteger", "Rf_isLanguage", 
+"Rf_isList", "Rf_isLogical", "Rf_isMatrix", "Rf_isNewList", "Rf_isNull", 
+"Rf_isNumber", "Rf_isNumeric", "Rf_isObject", "Rf_isOrdered", 
+"Rf_isPairList", "Rf_isPrimitive", "Rf_isProtected", "Rf_isReal", 
+"Rf_isS4", "Rf_isString", "Rf_isSymbol", "Rf_isTs", "Rf_isUnmodifiedSpecSym", 
+"Rf_isUnordered", "Rf_isUnsorted", "Rf_isUserBinop", "Rf_isValidName", 
+"Rf_isValidString", "Rf_isValidStringF", "Rf_isVector", "Rf_isVectorAtomic", 
+"Rf_isVectorList", "Rf_isVectorizable")
+
 testParamType =
     # p is a Argument, i.e. a parameter of an LLVM Function
+    #
+    # To find all the Rf_is* routines, we can use 
+    #  nm -gj ~/R/R-new/build/bin/exec/R | grep Rf_is 
+    #
+    # sub("^_", "", system("nm -gj ~/R/R-new/build/bin/exec/R | grep Rf_is  ", intern = TRUE))
+    #
 function(p, uses = getAllUsers(p))
 {
     w = sapply(uses, function(x) is(x, "CallBase") && is(cf <- getCalledFunction(x), "Function") && ( grepl("^Rf_is", getName(cf)) || getName(cf) %in% c("TYPEOF")))
@@ -65,7 +88,7 @@ function(p, uses = getAllUsers(p))
         if(any(w))
             fnNames[w] = sapply(tmp[w], getTYPEOFComparison)
 
-        return(fnNames)
+        return(unique(unlist(fnNames)))
     }
 
     NULL
