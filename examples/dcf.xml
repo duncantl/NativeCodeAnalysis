@@ -1,0 +1,337 @@
+<section>
+<title>Determining return types of routines in <r/> <dir>src/main</dir></title>
+
+<para>
+
+</para>
+
+<section>
+<title>read.dcf</title>
+
+<para>
+<r:code>
+mdcf = parseIR("~/R/R-new/build3/src/main/dcf.ir")
+r = getDefinedRoutines(mdcf, names = FALSE)
+sapply(r, getLinkage)
+<r:output><![CDATA[
+         do_readDCF.ExternalLinkage 
+                                  0 
+        con_cleanup.InternalLinkage 
+                                  7 
+      allocMatrixNA.InternalLinkage 
+                                  7 
+     Rconn_getline2.InternalLinkage 
+                                  7 
+     transferVector.InternalLinkage 
+                                  7 
+field_is_foldable_p.InternalLinkage 
+                                  7 
+]]></r:output>
+</r:code>
+So we need only concern ourselves  with <c:func>do_readDCF</c:func>
+as the other routines cannot be called directly but are local helper routines.
+</para>
+
+<para>
+There is only one return value
+<r:code>
+v = getReturnValues(mdcf$do_readDCF)
+<r:output><![CDATA[
+$if.end335
+[1] "  %230 = load %struct.SEXPREC.598*, %struct.SEXPREC.598** %retval2, align 8, !dbg !894"
+]]></r:output>
+</r:code>
+</para>
+
+
+<para>
+  When we get the R return types
+<r:code>
+z = getRReturnTypes(mdcf$do_readDCF)
+</r:code>
+we get three different types. They are all identical:
+<r:code>
+ty = unique(z)[[1]]
+<r:output><![CDATA[
+$type
+[1] "Matrix"
+
+$elType
+     STRSXP 
+"character"
+
+$dim
+$dim[[1]]
+[1] "i32 %nrow"
+
+$dim[[2]]
+[1] "i32 %ncol"
+
+
+attr(,"class")
+[1] "RMatrixType"
+]]></r:output>
+</r:code>
+So do_readDCF always returns a character matrix.
+</para>
+</section>
+
+
+<section>
+<title>max.col</title>
+
+<para>
+  The function max.col maps to do_maxcol
+<r:code>
+m = parseIR("~/R/R-new/build3/src/main/array.ir")
+r = getDefinedRoutines(m, names = FALSE)
+lnk = sapply(r, getLinkage)
+names(r)[lnk == ExternalLinkage]
+<r:output><![CDATA[
+ [1] "Rf_GetRowNames"   "Rf_GetColNames"   "do_matrix"       
+ [4] "Rf_allocMatrix"   "Rf_alloc3DArray"  "Rf_allocArray"   
+ [7] "Rf_DropDims"      "do_drop"          "do_length"       
+[10] "dispatch_length"  "dispatch_xlength" "do_lengths"      
+[13] "do_rowscols"      "do_matprod"       "do_transpose"    
+[16] "do_aperm"         "do_colsum"        "do_array"        
+[19] "do_diag"          "do_backsolve"     "do_maxcol"       
+]]></r:output>
+</r:code>
+</para>
+
+<para>
+<r:code>
+z = getRReturnTypes(m$do_maxcol)
+<r:output><![CDATA[
+$type
+   INTSXP 
+"integer" 
+
+$length
+[1] "  %call4 = tail call i32 @Rf_nrows(%struct.SEXPREC.607* %call1) #14"
+
+attr(,"class")
+[1] "RVectorType"
+]]></r:output>
+</r:code>
+The call to Rf_nrows receives CAR(args) and args is the top-level argument.
+Note that <r:func>max.col</r:func> calls
+<r:code>
+ .Internal(max.col(as.matrix(m), tieM))
+</r:code>
+We can determine <r:arg>tieM</r:arg> is an integer and actually a scalar integer
+due to the calls to <r:func>match.arg</r:func> and <r:func>which</r:func>.
+The <r/> code just converts <r:arg>m</r:arg> to a matrix, but doesn't necessarily change the
+type of elements. However, do_maxcol does coerce it to a numeric/REALSXP matrix.
+(This could be an expensive operation if the matrix is a large integer matrix.)
+</para>
+
+</section>
+
+<section>
+<title><r:func>diag</r:func></title>
+
+<para>
+<r:code>
+z = unique(getRReturnTypes(m$do_diag))
+</r:code>
+We get 5 types. These are all basically the same except the <r:el>elType</r:el>
+field which covers the atomic types in <r/>:
+<r:code>
+sapply(z, `[[`, "elType")
+<r:output><![CDATA[
+  REALSXP   CPLXSXP    INTSXP    LGLSXP    RAWSXP 
+"numeric" "complex" "integer" "logical"     "raw" 
+]]></r:output>
+</r:code>
+</para>
+<para>
+We don't preserve the information about how each arises.
+This is because the calls to <c:func>allocMatrix</c:func> have the literal
+values <c:var>REALSXP</c:var>, etc.
+These are part of a <c:keyword>switch</c:keyword> statement based on
+the <c:func>TYPEOF</c:func> the first element of <c:arg>args</c:arg>.
+</para>
+<para>
+We can find all of these calls to <c:func>Rf_allocMatrix</c:func> with
+<r:code>
+vv = unique(followAllPhis(getReturnValues(m$do_diag)))
+</r:code>
+(or using other approaches.)
+Next we get the BasicBlock for each and find their predecessors:
+<r:code>
+bl = lapply(vv, getParent)  
+pre = sapply(bl, getPredecessor)
+pre = unique(pre)
+</r:code>
+And sure enough, there is  a single, common predecessor for all of these.
+Its terminator is the switch instruction.
+<r:code>
+cond = getTerminator(pre)[[1]]
+<r:output><![CDATA[
+[1] "  %call27 = tail call i32 @TYPEOF(%struct.SEXPREC.607* %call1) #14"
+]]></r:output>
+</r:code>
+This is a <r:class>CallInst</r:class> and calls TYPEOF. (Note this may be macro-ized and we may need to  generate
+the <ir/> differently, with the USE_R_INTERNALS defined.)
+</para>
+<para>
+The argument in the call to <c:func>TYPEOF</c:func> is
+<r:code>
+  cond[[1]]
+<r:output><![CDATA[
+[1] "  %call1 = tail call %struct.SEXPREC.607* @CAR(%struct.SEXPREC.607* %args) #14"
+]]></r:output>  
+</r:code>
+and the argument to CAR is the routines <c:arg>args</c:arg> argument.
+</para>
+
+<para>
+So we can  match the TYPEOF to the different return types.
+<r:code>
+term = getTerminator(pre)
+els = term[]
+w = sapply(els, is, "ConstantInt")
+sapply(els[w], getValue)
+swVals = c(NA, sapply(els[w], getValue))
+<r:output><![CDATA[
+[1] NA 14 15 13 10 24
+]]></r:output>
+</r:code>
+And the default case branches to creating a numeric matrix.
+</para>
+<para>
+The SEXPTYPEs for the return values are
+<r:code>
+rt = sapply(vv, function(x) getValue(x[[1]]))
+</r:code>
+The first of these is the default from the switch.
+</para>
+<para>
+So we can match the return types to the TYPEOF in the switch.
+<r:code>
+swVals == rt
+<r:output><![CDATA[
+[1]   NA TRUE TRUE TRUE TRUE TRUE
+]]></r:output>
+</r:code>
+</para>
+</section>
+
+
+<section>
+<title>do_capabilities</title>
+
+<para>
+<r:code>
+getRReturnTypes(m$do_capabilities)
+<r:output><![CDATA[
+$type
+   LGLSXP 
+"logical" 
+
+$length
+ConstantInt 
+         19 
+attr(,"type")
+Type IntegerTyID 
+
+attr(,"class")
+[1] "RVectorType"
+]]></r:output>  
+</r:code>
+We didn't get the names of this vector.
+We do for lists, so we can add these. The functions are in findNames.R.
+We add these for RVectorType returns from pAllocVector:
+<r:code>
+names = getReturnValueNames(rv = list(x))
+if(length(names)) 
+    ans$names = names[[1]]
+</r:code>
+</para>
+</section>
+
+<section>
+<title></title>
+
+<para>
+<r:code>
+getRReturnTypes(m$do_getlocale)
+<r:output><![CDATA[
+$type
+[1] "character"
+
+$length
+[1] 1
+
+attr(,"class")
+[1] "RScalarType" "RVectorType"
+]]></r:output>
+</r:code>
+Added Rf_mkString handler code in pAllocVector.
+</para>
+</section>
+
+<section>
+<title></title>
+
+<para><fix>the code. Works but need the type descriptions to be better and to unravel.</fix>
+<r:code>
+getRReturnTypes(m$do_dircreate)
+</r:code>
+</para>
+</section>
+
+<section>
+<title></title>
+
+
+<para>
+  For do_fileinfo, we get a list with 9/10
+  The file.info function converts some of the elements to POSIXct and
+  also makes the result a data.frame. It is not the <c/> code so list is correct.
+</para>
+
+<para><fix/>
+The following raise an error, all the same issue.
+<r:code>
+v = getRReturnTypes(m$do_filesymlink)
+</r:code>
+Fails with getValue on a CallInst to LENGTH.
+Same with do_fileappend and do_filelink.
+Is is in mkLength with a SelectInst instruction.
+These two possible values are CallInst to LENGTH.
+So we loop over the outcomes and call mkLength recursively.
+</para>
+
+<para>
+For the other do_ routines, getRReturnTypes return successfully but we have to check the types.
+</para>
+
+</section>
+
+<section>
+<title>util.c</title>
+
+<para><fix/>
+  do_enc2 goes into an infinite loop in followAllPhis.
+  We revisit the same ones, but in separate calls!
+</para>
+</section>
+
+<section>
+<title></title>
+
+<para>
+See readFunTab.R for the input data.
+When applying <r:func>getRReturnTypes</r:func>
+<r:code>
+z = getRReturnTypes(mods$attrib.ir$R_do_data_class)
+</r:code>
+This is in attrib.c.
+There are two blocks PRIMVAL(op) being 1 or 2.
+The error is occurs for PRIMVAL(op) being 1.
+</para>
+</section>
+
+</section>

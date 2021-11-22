@@ -16,10 +16,8 @@
 #getCallName = NativeCodeAnalysis:::getCallName
 
 getReturnValueNames =
-function(fun)
+function(fun, rv = getReturnValues(fun))
 {
-    rv = getReturnValues(fun)
-    
     setn = lapply(rv, findSetNames)
     lapply(setn, getNameVectors)
 }
@@ -54,6 +52,7 @@ function(e, on, sym)
 
 
 getNameVectors =
+    # x should be a list of Rf_setAttrib with R_NamesSymbol as the 2nd value.
 function(x)
 {
    unlist(lapply(x, getNameVector))
@@ -64,7 +63,8 @@ function(x)
 {
     x = x[[3]] # 3rd arg. in Rf_setAttrib()
     u = getAllUsers(x)
-    lapply(u, getSetStringEltValue)
+    w = sapply(u, function(x) is(x, "CallInst") && getName(getCalledFunction(x)) == "SET_STRING_ELT")
+    lapply(u[w], getSetStringEltValue)
 }
 
 getSetStringEltValues =

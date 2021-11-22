@@ -1,9 +1,13 @@
+#!!!!  These should move to Rllvm, but we need to check that they fit the the
+# idea of getValue.  The function is more for converting LLVM values to R, i.e. literal values.
+# These methods extend it to more symbolic information, i.e., Arguments, 
+
 setMethod("getValue", "StoreInst",
           function(x, ...)
              x[[1]]
           )
 
-getValue.NoLoadInst =
+getValue_NoLoadInst =
 function(x, ...) {
              u = getAllUsers(x)
              u = u[!sapply(u, is, "LoadInst")]
@@ -13,10 +17,27 @@ function(x, ...) {
              u
          }
 
-setMethod("getValue", "LoadInst", function(x, ...) getValue.NoLoadInst(x[[1]], ...))
-setMethod("getValue", "AllocaInst", getValue.NoLoadInst)
+setMethod("getValue", "LoadInst", function(x, ...) getValue_NoLoadInst(x[[1]], ...))
+setMethod("getValue", "AllocaInst", getValue_NoLoadInst)
 
+setMethod("getValue", "SelectInst",
+          function(x, ...)
+             sapply(x[-1], getValue)
+          )
 
+setMethod("getValue", "CallInst",
+          function(x, ...) {
+              id = getCallName(x)
+              switch(id,
+                     Rf_str2type = structure(NA, class = "SEXPTYPE"),
+                     NA)
+          })
+
+setMethod("getValue", "CastInst",
+          function(x, ...) 
+              getValue(x[[1]])
+          )
+# -----------
 
 getRReturnTypes =
 function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = character())
@@ -48,9 +69,22 @@ function(fun, ret = getReturnValues(fun), module = as(fun, "Module"), stack = ch
     ret = ret[[1]]
     # What about getCallType(), compReturnType()
     tmp = pAllocVector(ret, module, stack = stack)
-    tmp[ ! sapply(tmp, is.null) ]
+    .trim(tmp)
 }
 
+.trim =
+function(tmp)
+{
+    # If we have a list with a class other than list, leave that alone.
+    if(length(class(tmp)) > 1 || class(tmp) != "list")
+        return(tmp)
+    
+    tmp = tmp[ ! sapply(tmp, is.null) ]
+    if(length(tmp) == 1)
+        tmp[[1]]
+    else
+        tmp
+}
 
 followAllPhis =
     #
@@ -59,10 +93,14 @@ followAllPhis =
     #
 function(x)
 {
-    ans = x[]
-    while(any(  w <- sapply(ans, is, "PHINode") )) {
-        ans = c(ans, unlist(lapply(ans[w],`[`)))
-        ans = ans[ - which(w) ]
+#    browser()
+    tmp = ans = x[]
+    while(any(  w <- sapply(tmp, is, "PHINode") )) {
+        tmp = unlist(lapply(ans[w],`[`))
+        w = !(tmp %in% ans)
+        tmp = tmp[w]
+        ans = c(ans, tmp)
+#        ans = ans[ - which(w) ]
         ans = unique(ans)
     }
 
@@ -79,20 +117,29 @@ function(x, module, stack = character(), prev = list())
         return(NULL)
 
     prev = c(prev, x)
-        
+    if(is(x, "LoadInst"))
+        return(pAllocVector(x[[1]], module, stack, prev))
+
+#    if(is(x, "CallInst") &&  getName(getCalledFunction(x)) == "allocMatrixNA") browser()
+
+    
     if(is(x, "PHINode")) {
         # "unravel" this phi and all the nodes it points to get rid of the PHI nodes
         # and end up with the unique Value objects that are not PHI nodes.
         v = followAllPhis(x)
-        return(lapply(v, pAllocVector, module, stack))
+        ans = lapply(v, pAllocVector, module, stack)
+        return(.trim(ans))
 #        return(lapply(unique(x[]), pAllocVector, module = module, stack = stack, prev = prev))
     }
 
     
     if(is(x, "CallInst")) {
         fname = getName(getCalledFunction(x))
+        if(is.na(fname))
+            return(structure(list(NULL), class = "IndirectRoutineCall"))
+        
         if(fname == "Rf_protect")
-            return(pAllocVector(x[[1]], module, stack, prev))
+            return(.trim(pAllocVector(x[[1]], module, stack, prev)))
 
         if(fname == "Rf_coerceVector") {
             sexpty = x[[2]]
@@ -104,7 +151,11 @@ function(x, module, stack = character(), prev = list())
             sexpty = x[[1]]  
             # If the type is an argument, then we cannot determine the R type
             # except for via calls to this routine.
-            if(!is(sexpty, "Argument"))
+            #?? Should we have getRType() handle Argument  and PHINode objects
+            if(is(sexpty, "PHINode"))
+                 # !!! would like to keep the types with the lengths.
+                sexpty = sapply(sexpty[], getValue)
+            else if(!is(sexpty, "Argument"))
                 sexpty = getRType(getValue(sexpty))
 
             # if the first argument is TYPEOF(arg), want to capture that symbollically.
@@ -112,6 +163,10 @@ function(x, module, stack = character(), prev = list())
             if(is.character(ans$type) && ans$type == "list") 
                 ans$elTypes = getElementTypes(x, module)
 
+            names = getReturnValueNames(rv = list(x))
+            if(length(names)) 
+                ans$names = names[[1]]
+            
             return(ans)
         }
 
@@ -134,12 +189,19 @@ function(x, module, stack = character(), prev = list())
                         Rf_ScalarLogical = "logical",
                         Rf_ScalarInteger = "integer",
                         Rf_ScalarString = "character")
-            return(structure(list(type = ty, length = 1), class = c('RScalarType', 'RVectorType')))
+            ans = structure(list(type = ty, length = 1), class = c('RScalarType', 'RVectorType'))
+            return(ans)
+        }
+
+        if(fname == "Rf_mkString") {
+            ans = structure(list(type = "character", length = 1), class = c('RScalarType', 'RVectorType'))
+            return(ans)
         }
         
         if(fname %in% names(module) && length(getBlocks(f2 <- module[[fname]]))) {
             # analyze the function, but then see if the call provides additional information.
             ans = getRReturnTypes(f2, module = module, stack = stack)
+            browser()
             ans = mergeCallWithReturnTypes(ans, x)
             return(ans)
         } else {
@@ -148,11 +210,11 @@ function(x, module, stack = character(), prev = list())
             return(x)
         }
     } else if(is(x, "LoadInst"))
-        return(pAllocVector(x[[1]], module, stack, prev))
+        return(.trim(pAllocVector(x[[1]], module, stack, prev)))
     else if(is(x, "AllocaInst")) {
         u = getAllUsers(x)
         u = u[!sapply(u, isLoadReturn)]
-        lapply(u, pAllocVector, module, stack, prev)
+        .trim(lapply(u, pAllocVector, module, stack, prev))
     } else if(is(x, "StoreInst"))
         pAllocVector(x[[1]], module, stack, prev)
     else if(is(x, "CastInst"))
@@ -161,13 +223,21 @@ function(x, module, stack = character(), prev = list())
         id = getName(x)
         return(switch(id,
                       "R_NilValue" = structure("R_NilValue", class = "NULLType"),
+                      "R_LogicalNAValue" = structure("R_LogicalNAValue", class = "logical"),
+                      "R_FalseValue" = structure("R_FalseValue", class = "logical"),
+                      "R_TrueValue" = structure("R_TrueValue", class = "logical"),
                       R_NaString = structure(list(type = "character", length = 1, value = as.character(NA)), class = c("RScalarType", "RVectorType"))))
     } else if(is(x, "Constant"))
         getValue(x)
-    else
+    else if(is(x, "SelectInst")) {
+        #XXXX Fix up and the code above for LogicalNAValue, FalseValue and TrueValue.
+        # Get the type descriptions right.
+        .trim(lapply(x[-1], pAllocVector, module, stack, prev))
+    }  else
         x
 }                
 
+#trace(pAllocVector, exit = quote(if(!is.null(returnValue())) { print(x); print(class(returnValue()))}), print = FALSE)
 
 mergeCallWithReturnTypes =
     #
@@ -193,8 +263,10 @@ function(ans, call)
     if(unl <- test(ans)) {
         ans = list(ans)
         w = TRUE
-    } else 
+    } else
+           # could still be an Argument, not a list of types.
         w = sapply(ans, test)
+    
     if(any(w)) 
         ans[w] = lapply(ans[w], substituteArgInType, call)
 
@@ -214,8 +286,9 @@ function(type, call)
     # If TYPEOF(x), then want to represent this symbolically and determine what x
     # is a local variable or a parameter.
     tmp = findValue(v)
+
     if(!is.null(tmp))
-       type[[el]] = tmp
+       type[[el]] = getRType(tmp)
     type
 }
 
@@ -274,12 +347,12 @@ mkLength =
     #
 function(x)
 {
-    browser()
+    #browser()
     x = unravel(x)
 
     if(is(x, "CallInst")) {
         rtn = getCallName(x)
-        if(rtn == "Rf_length")
+        if(rtn %in% c("Rf_length", "LENGTH", "XLENGTH"))
             return(LengthOf(x[[1]]))
         else {
             if(rtn %in% c("INTEGER", "LOGICAL", "REAL")) {
@@ -300,10 +373,19 @@ function(x)
                )
     } else if(is(x, "GetElementPtrInst")) {
         getElementOf(x)
-   
-    } else
+    } else if(is(x, "SelectInst")) {
+        structure(lapply(x[-1], mkLength), class = c("SelectLengthOf", "LengthOf"))
+    } else if(is(x, "PHINode")) {
+        structure(lapply(x[], mkLength), class = c("SelectLengthOf", "LengthOf"))
+    } else 
         getValue(x)
+
+    # Also handle BinaryOperator - but here or in getValue() or what? How to make
+    # this symbolic
+    
 }
+
+#trace(mkLength, exit = browser, print = FALSE)
 
 
 getElementOf =
