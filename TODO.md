@@ -1,5 +1,12 @@
 # TODO
 
++ Look at the functions in getBaseClasses.R to see if we want to incorporate some the functions
+  there into this package.
+
++ look at Rllvm/TU/findClassesInRllvmSrc.R and the function findRllvmInstructions and
+  getComputedValue
+   and see if we want to mimic or move them here.
+
 + compReturnType
    +  Need to keep the RNULL class on a return of R_NilValue and also not merge the two return values.
        + see CRAN2/Pkgs/zfa - table_e1   
