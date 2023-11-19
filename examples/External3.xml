@@ -1,4 +1,6 @@
-<section>
+<section
+	 xmlns:r="http://www.r-project.org"
+	 xmlns:sh="http://www.shell.org">
 <title></title>
 
 
@@ -13,17 +15,24 @@
 </para>
 
 
+
+<para>
+<sh:code>
+R CMD make -f IRMakefile ctapply.ir LLVM_CPPFLAGS="-Xclang -no-opaque-pointers"
+</sh:code>
+</para>
+
+
 <para>
 <r:code>
 library(Rllvm)
 library(NativeCodeAnalysis)
-f = "~/CRAN/Pkgs/fastmatch/src/ctapply.ir"
+f = "~/CRAN2/Pkgs/fastmatch/src/ctapply.ir"
 m = parseIR(f)
 </r:code>
 
 <r:code>
-f = m$ctapply_
-ty = inferExternalParamTypes(f)
+ty = inferExternalParamTypes(m$ctapply_)
 </r:code>
 </para>
 </section>

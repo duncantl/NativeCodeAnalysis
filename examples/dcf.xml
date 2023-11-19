@@ -331,7 +331,41 @@ z = getRReturnTypes(mods$attrib.ir$R_do_data_class)
 This is in attrib.c.
 There are two blocks PRIMVAL(op) being 1 or 2.
 The error is occurs for PRIMVAL(op) being 1.
+
 </para>
+
+<para>
+  For do_cum in cum.c, this calls icumsum with two arguments x and s.
+  The return value is  the argument s.
+  So we need to find the type of s in this call.
+  It is the second argument in the call.
+  So we find how it was defined in this do_cum routine.
+<r:code>
+
+</r:code>  
+</para>
+
+</section>
+
+<section>
+<title></title>
+
+<para>
+<r:code>
+table(funTab$arity)
+<r:output><![CDATA[
+ -1   0   1   2   3   4   5   6   7   8   9  19 
+ 82  45 213 142  93  68  60  23   5  10   1   1 
+]]></r:output>
+</r:code>
+</para>
+
+<para>
+<r:code>
+
+</r:code>
+</para>
+
 </section>
 
 </section>

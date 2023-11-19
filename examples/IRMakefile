@@ -15,7 +15,7 @@ IR=$(patsubst %.cpp,%.ir, $(patsubst %.c, %.ir, $(SOURCES)))
 ir: $(IR)
 
 %.ir: %.c
-	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $< -o $@
+	$(CLANG) -fno-discard-value-names -fno-inline-functions -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $< -o $@
 
 %.ir: %.cpp
 	$(CLANG) -fno-discard-value-names -emit-llvm -S $(PKG_CPPFLAGS) $(PKG_CXXFLAGS) $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) -c $< -o $@
