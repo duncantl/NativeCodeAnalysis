@@ -47,7 +47,7 @@ sapply(els, function(x) if(!isZeroValue(x)) getValue(x[[3]]) else NA)
 
 <para>
 <r:code>
-RMainDir = "~/R-devel/build/src/main"
+RMainDir = "~/R/R-new/build3/src/main"
 m = parseIR(file.path(RMainDir, "names.ir"))
 </r:code>
 With additions to the <cpp/> code in <r:pkg>Rllvm</r:pkg>,
