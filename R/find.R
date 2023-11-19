@@ -26,6 +26,8 @@ function(x, test, ...)
   found = lapply(x, function(block) {
     # QQ: Might be nice if getBlockInstructions was an as.list method so that
     # getBlockInstructions isn't necessary here.
+    #  Can use block[] to get instructions which is even simpler than as.list()
+    #  but of course it is an indirect alias to getBlockInstructions
     instrs = getBlockInstructions(block)
     is_match = vapply(instrs, test, NA, ...)
     instrs[is_match]

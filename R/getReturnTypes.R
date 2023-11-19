@@ -111,7 +111,7 @@ pAllocVector =
     #
     # How does this relate to getCallType() and compReturnType()
     #
-function(x, module, stack = character(), prev = list()) 
+function(x, module = as(x, "Module"), stack = character(), prev = list()) 
 {
     if(any(sapply(prev, identical, x)))
         return(NULL)
@@ -138,7 +138,7 @@ function(x, module, stack = character(), prev = list())
         if(is.na(fname))
             return(structure(list(NULL), class = "IndirectRoutineCall"))
         
-        if(fname == "Rf_protect")
+        if(fname %in% c("Rf_protect", "Rf_duplicate"))
             return(.trim(pAllocVector(x[[1]], module, stack, prev)))
 
         if(fname == "Rf_coerceVector") {
@@ -147,7 +147,7 @@ function(x, module, stack = character(), prev = list())
                 sexpty = getRType(getValue(sexpty))
             ans = structure(list(type = sexpty, length = NA, class = "RVectorType"))
             return(ans)
-        } else if(fname %in% c("Rf_allocVector3", "Rf_allocVector")) {
+        } else if(fname %in% c("Rf_allocVector3", "Rf_allocVector", "Rf_allocSExp")) {
             sexpty = x[[1]]  
             # If the type is an argument, then we cannot determine the R type
             # except for via calls to this routine.
@@ -168,6 +168,8 @@ function(x, module, stack = character(), prev = list())
                 ans$names = names[[1]]
             
             return(ans)
+        } else if(fname == "RfallocS4Object") {
+            return(list(), class = "GenericS4Object")
         }
 
         if(fname %in% c("Rf_allocMatrix")) {
@@ -201,12 +203,12 @@ function(x, module, stack = character(), prev = list())
         if(fname %in% names(module) && length(getBlocks(f2 <- module[[fname]]))) {
             # analyze the function, but then see if the call provides additional information.
             ans = getRReturnTypes(f2, module = module, stack = stack)
-            browser()
+#            browser()
             ans = mergeCallWithReturnTypes(ans, x)
             return(ans)
         } else {
             print(x)
-#            browser()
+ #           browser()
             return(x)
         }
     } else if(is(x, "LoadInst"))
@@ -257,6 +259,13 @@ mergeCallWithReturnTypes =
     #
 function(ans, call)
 {
+
+    if(is(ans, "Argument")) {
+        i = paramIndex(ans)
+        return(pAllocVector(call[[i]]))
+    }
+
+    
     test = function(x) (is(x, 'RVectorType') && is(x$type, "Argument")) ||
                          (is(x, 'RMatrixType') && is(x$elType, "Argument"))
     

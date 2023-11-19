@@ -38,19 +38,32 @@ function(p, users = getAllUsers(p)) # , direct = FALSE))
     }
     
     w = ku %in% c("REAL", "INTEGER", "LOGICAL", "STRING_ELT", "SET_STRING_ELT")
+    # REAL is not in RSEXPTypeValues.df$rtypeName
         
     ans = if(any(w)) {
-        i = match(tolower(ku[w]), RSEXPTypeValues.df$rtypeName)
-        if(!is.na(i))
-            return(getRType(RSEXPTypeValues.df[i, 1]))
-        list(type = switch(ku[w],
-               REAL = getRType(14),
-               "STRING_ELT"=,
-               "SET_STRING_ELT" = getRType(16),
-               "VECTOR_ELT" = ,
-               "SET_VECTOR_ELT" = getRType(2)
-                 ),
-             length = NA) #XXX FIX!
+              # may have more than ku[w] and not all may match in $rtypeName.
+              i = match(tolower(ku[w]), RSEXPTypeValues.df$rtypeName)
+              tmp = NULL
+              if(any(!is.na(i))) {
+                  tmp = getRType(RSEXPTypeValues.df[i[!is.na(i)], 1])
+                  if(all(!is.na(i)))
+                      return(tmp)
+              }
+
+              
+              tmp2 = list(type = switch(ku[w][is.na(i)],
+                                 REAL = getRType(14),
+                                 "STRING_ELT"=,
+                                 "SET_STRING_ELT" = getRType(16),
+                                 "VECTOR_ELT" = ,
+                                 "SET_VECTOR_ELT" = getRType(2)
+                                 ),
+                          length = NA) #XXX FIX!
+              if(!is.null(tmp)) {
+                 # merge with tmp2
+              }
+              
+                  
     }
 
     if(!is.null(ans))
